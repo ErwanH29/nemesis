@@ -205,7 +205,6 @@ class Nemesis(object):
                 print(f"System {nsyst+1}/{ntotal}, radius: {parent.radius.in_(units.au)}")
 
         self.particles.recenter_subsystems(max_workers=self.avail_cpus)
-
         if (self.__gal_field):
             self._setup_bridge()
         else:
@@ -601,7 +600,7 @@ class Nemesis(object):
     def _process_parent_mergers(self, corr_time) -> None:
         """
         Process parent mergers by merging children systems into new parents.
-        Reverse kicks are applied to children systems, and new offset is 
+        Reverse kicks are applied to children systems, and new offset is.
         previous timestep.
         """
         def process_single_merger(parent_key_oldparent):
@@ -683,7 +682,7 @@ class Nemesis(object):
             offset = result["offset"]
             scale_radius = result["scale_radius"]
             worker_pid = result["worker_pid"]
-            
+
             new_parent = self.particles[particle_keys == parent_key][0]
             newparent_key = new_parent.key
             new_parent.radius = min(scale_radius, PARENT_RADIUS_MAX)
