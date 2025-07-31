@@ -178,7 +178,7 @@ class Nemesis(object):
             
             scale_mass = parent.mass
             scale_radius = set_parent_radius(scale_mass)
-            parent.radius = scale_radius
+            parent.radius = min(PARENT_RADIUS_MAX, scale_radius)
             if parent not in self.subcodes:
                 code, number_of_workers = self._sub_worker(
                                             children=sys, 
@@ -205,8 +205,6 @@ class Nemesis(object):
                 print(f"System {nsyst+1}/{ntotal}, radius: {parent.radius.in_(units.au)}")
 
         self.particles.recenter_subsystems(max_workers=self.avail_cpus)
-        overly_massive = particles.radius > PARENT_RADIUS_MAX
-        particles[overly_massive].radius = PARENT_RADIUS_MAX
 
         if (self.__gal_field):
             self._setup_bridge()
@@ -597,9 +595,7 @@ class Nemesis(object):
                     del subsys, parent
 
         if len(new_isolated) > 0:
-            new_isolated.radius = set_parent_radius(new_isolated.mass)
-            overly_massive = new_isolated.radius > PARENT_RADIUS_MAX
-            new_isolated[overly_massive].radius = PARENT_RADIUS_MAX
+            new_isolated.radius = min(PARENT_RADIUS_MAX, set_parent_radius(new_isolated.mass))
             self.particles.add_particles(new_isolated)
 
     def _process_parent_mergers(self, corr_time) -> None:
@@ -646,11 +642,8 @@ class Nemesis(object):
                 else:
                     p.radius = planet_radius(p.mass)
 
-            new_parent = _particle_by_key[parent_key]
-            scale_mass = new_parent.mass
+            scale_mass = newparts.mass.sum()
             scale_radius = set_parent_radius(scale_mass)
-            new_parent.radius = min(scale_radius, PARENT_RADIUS_MAX)
-
             with self.__lock:
                 newcode, number_of_workers = self._sub_worker(
                                                 children=newparts,
@@ -660,12 +653,12 @@ class Nemesis(object):
                 worker_pid = self.get_child_pids(number_of_workers)
 
             result.update({
-                "new_parent": new_parent,
-                "newparent_key": new_parent.key,
+                "parent_key": parent_key,
                 "newcode": newcode,
                 "offset": offset,
+                "scale_radius": scale_radius,
                 "worker_pid": worker_pid,
-                "children": newparts.copy(),  # use copy so we can safely reuse
+                "children": newparts,  # use copy so we can safely reuse
                 })
             return result
 
@@ -673,9 +666,7 @@ class Nemesis(object):
         if self.dE_track:
             E0 = self.calculate_total_energy()
 
-        copied_set = self.particles.copy()
-        _particle_by_key = {p.key: p for p in copied_set}
-
+        particle_keys = self.particles.key
         merger_results = [ ]
         with ThreadPoolExecutor(max_workers=8) as executor:
             futures = list(executor.map(
@@ -686,13 +677,16 @@ class Nemesis(object):
             merger_results.extend(futures)
 
         for result in merger_results:
-            new_parent = result["new_parent"]
+            parent_key = result["parent_key"]
             newparts = result["children"]
-            newparent_key = result["newparent_key"]
             newcode = result["newcode"]
             offset = result["offset"]
+            scale_radius = result["scale_radius"]
             worker_pid = result["worker_pid"]
-
+            
+            new_parent = self.particles[particle_keys == parent_key][0]
+            newparent_key = new_parent.key
+            new_parent.radius = min(scale_radius, PARENT_RADIUS_MAX)
             self.particles.assign_subsystem(new_parent, newparts)
 
             self.resume_workers(worker_pid)
@@ -706,13 +700,6 @@ class Nemesis(object):
             )
             self._pid_workers[newparent_key] = worker_pid
             self.hibernate_workers(worker_pid)
-
-        # Update radii and energy tracking
-        new_parents = self.particles[-len(merger_results):]
-        overly_massive = new_parents.radius > PARENT_RADIUS_MAX
-        new_parents[overly_massive].radius = PARENT_RADIUS_MAX
-
-        del _particle_by_key, copied_set
 
         if self.dE_track:
             E1 = self.calculate_total_energy()
