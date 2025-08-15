@@ -165,4 +165,3 @@ cython_debug/
 examples/*/N*
 examples/*/initial_particles
 plotters/*
-*.mp4
