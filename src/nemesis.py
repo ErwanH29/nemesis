@@ -181,10 +181,10 @@ class Nemesis(object):
             parent.radius = min(PARENT_RADIUS_MAX, scale_radius)
             if parent not in self.subcodes:
                 code, number_of_workers = self._sub_worker(
-                                            children=sys, 
-                                            scale_mass=scale_mass, 
-                                            scale_radius=scale_radius
-                                            )
+                    children=sys, 
+                    scale_mass=scale_mass, 
+                    scale_radius=scale_radius
+                    )
 
                 self._time_offsets[code] = self.model_time
                 self.subsystems[parent_key] = (parent, sys)
@@ -271,9 +271,9 @@ class Nemesis(object):
                 if 'ph4_worker' in child.name() or 'huayno_worker' in child.name():
                     child_pids.append(child.pid)
             except Exception as e:
-                print(f"Error extracting PID: {e}")
-                print("Check your children integrator matches the expected name")
-                exit(-1)
+                error = f"Error extracting PID from child process: {child.name()} \n" \
+                         "Check if child worker name matches expected name in get_child_pids."
+                raise ValueError(error) from e
 
         return child_pids
 
@@ -534,67 +534,82 @@ class Nemesis(object):
         if self.dE_track:
             E0 = self.calculate_total_energy()
 
+        new_pids = [ ]
         new_isolated = Particles()
         for parent_key, (parent, subsys) in list(self.subsystems.items()):
             host = subsys[subsys.mass.argmax()]
             par_rad = parent.radius
             par_pos = parent.position
-            furthest = (subsys.position - host.position).lengths().max()
-            criteria = (CONNECTED_COEFF/max(1, self.dt_step)) * par_rad
-            if furthest > criteria / 2.:
-                components = connected_components_kdtree(subsys, threshold=1.2*criteria)
-                if len(components) > 1:
-                    if self._verbose:
-                        print("...Split Detected...")
+            
+            criteria = CONNECTED_COEFF * par_rad
+            criteria_sq = criteria * criteria
+            furthest_sq = (subsys.position - host.position).lengths_squared().max()
+            if furthest_sq < criteria_sq/4:
+                continue
+            
+            components = connected_components_kdtree(subsys, threshold=1.2*criteria)
+            if len(components) > 1:
+                if self._verbose:
+                    print("...Split Detected...")
 
-                    par_vel = parent.velocity
+                par_vel = parent.velocity
 
-                    pid = self._pid_workers.pop(parent_key)
-                    self.resume_workers(pid)
-                    self.particles.remove_particle(parent)
+                pid = self._pid_workers.pop(parent_key)
+                self.resume_workers(pid)
+                self.particles.remove_particle(parent)
 
-                    code = self.subcodes.pop(parent_key)
-                    self._time_offsets.pop(code)
-                    self._child_channels.pop(parent_key)
-                    cpu_time = self._cpu_time.pop(parent_key)
-                    for c in components:
-                        sys = c.copy()
-                        sys.position += par_pos
-                        sys.velocity += par_vel
+                code = self.subcodes.pop(parent_key)
+                self._time_offsets.pop(code)
+                self._child_channels.pop(parent_key)
+                cpu_time = self._cpu_time.pop(parent_key)
+                for c in components:
+                    sys = c.as_set()
+                    sys.position += par_pos
+                    sys.velocity += par_vel
 
-                        if len(sys) > 1 and max(sys.mass) > (0. | units.kg):
-                            newparent = self.particles.add_subsystem(sys)
-                            newparent_key = newparent.key
-                            scale_mass = newparent.mass
-                            scale_radius = set_parent_radius(scale_mass)
-                            newparent.radius = scale_radius
+                    if len(sys) > 1 and max(sys.mass) > (0. | units.kg):
+                        newparent = self.particles.add_subsystem(sys)
+                        newparent_key = newparent.key
+                        scale_mass = newparent.mass
+                        scale_radius = set_parent_radius(scale_mass)
+                        newparent.radius = scale_radius
 
-                            newcode, number_of_workers = self._sub_worker(
-                                                            children=sys,
-                                                            scale_mass=scale_mass,
-                                                            scale_radius=scale_radius
-                                                            )
-                            worker_pid = self.get_child_pids(number_of_workers)
-
-                            self._cpu_time[newparent_key] = cpu_time
-                            self.subcodes[newparent_key] = newcode
-                            self._time_offsets[newcode] = self.model_time
-                            self._child_channel_maker(
-                                parent_key=newparent_key,
-                                code_particles=newcode.particles,
-                                children=sys
+                        newcode, number_of_workers = self._sub_worker(
+                            children=sys,
+                            scale_mass=scale_mass,
+                            scale_radius=scale_radius
                             )
-                            self._child_channels[newparent_key]["from_children_to_gravity"].copy()
-                            self._pid_workers[newparent_key] = worker_pid
-                            self.hibernate_workers(worker_pid)
+                        worker_pid = self.get_child_pids(number_of_workers)
 
-                        else:
-                            new_isolated.add_particles(sys)
+                        self._cpu_time[newparent_key] = cpu_time
+                        self.subcodes[newparent_key] = newcode
+                        self._time_offsets[newcode] = self.model_time
 
-                    code.cleanup_code()
-                    code.stop()
+                        self._child_channel_maker(
+                            parent_key=newparent_key,
+                            code_particles=newcode.particles,
+                            children=sys
+                        )
+                        self._child_channels[newparent_key]["from_children_to_gravity"].copy()  # More precise
+                        
+                        self._pid_workers[newparent_key] = worker_pid
+                        new_pids.append(worker_pid)
+                        if len(new_pids) > int(self.avail_cpus // 2):
+                            for pid in new_pids:
+                                self.hibernate_workers(pid)
+                            new_pids.clear()
 
-                    del subsys, parent
+                    else:
+                        new_isolated.add_particles(sys)
+
+                code.cleanup_code()
+                code.stop()
+
+                del subsys, parent
+
+        for pid in new_pids:
+            self.hibernate_workers(pid)
+        new_pids.clear()
 
         if len(new_isolated) > 0:
             new_isolated.radius = set_parent_radius(new_isolated.mass)
@@ -654,10 +669,10 @@ class Nemesis(object):
             scale_radius = set_parent_radius(scale_mass)
             with self.__lock:
                 newcode, number_of_workers = self._sub_worker(
-                                                children=newparts,
-                                                scale_mass=scale_mass,
-                                                scale_radius=scale_radius,
-                                                )
+                    children=newparts,
+                    scale_mass=scale_mass,
+                    scale_radius=scale_radius,
+                    )
                 worker_pid = self.get_child_pids(number_of_workers)
 
             result.update({
@@ -1255,11 +1270,11 @@ class Nemesis(object):
             dt (units.time):        Time-step of correction kick
         """
         ax, ay, az = corr_code.get_gravity_at_point(
-                        particles.radius,
-                        particles.x, 
-                        particles.y, 
-                        particles.z
-                        )
+            particles.radius,
+            particles.x, 
+            particles.y, 
+            particles.z
+            )
 
         particles.velocity[:,0] += dt * ax
         particles.velocity[:,1] += dt * ay
@@ -1292,19 +1307,19 @@ class Nemesis(object):
         subsystem_z = subsystem.z + parent_z
         
         corr_par = CorrectionForCompoundParticle(
-                        grav_lib=self.lib,
-                        parent_x=parent_x,
-                        parent_y=parent_y,
-                        parent_z=parent_z, 
-                        system=subsystem,
-                        system_x=subsystem_x,
-                        system_y=subsystem_y,
-                        system_z=subsystem_z, 
-                        perturber_mass=perturber_mass,
-                        perturber_x=perturber_x,
-                        perturber_y=perturber_y,
-                        perturber_z=perturber_z,
-                        )
+            grav_lib=self.lib,
+            parent_x=parent_x,
+            parent_y=parent_y,
+            parent_z=parent_z, 
+            system=subsystem,
+            system_x=subsystem_x,
+            system_y=subsystem_y,
+            system_z=subsystem_z, 
+            perturber_mass=perturber_mass,
+            perturber_x=perturber_x,
+            perturber_y=perturber_y,
+            perturber_z=perturber_z,
+            )
         self._kick_particles(subsystem, corr_par, dt)
        
     def _correction_kicks(
@@ -1332,17 +1347,17 @@ class Nemesis(object):
             pert_zpos = particles_z[mask]
 
             future = executor.submit(
-                        self._correct_children,
-                        perturber_mass=pert_mass,
-                        perturber_x=pert_xpos,
-                        perturber_y=pert_ypos,
-                        perturber_z=pert_zpos,
-                        parent_x=parent.x,
-                        parent_y=parent.y,
-                        parent_z=parent.z,
-                        subsystem=children,
-                        dt=dt
-                        )
+                self._correct_children,
+                perturber_mass=pert_mass,
+                perturber_x=pert_xpos,
+                perturber_y=pert_ypos,
+                perturber_z=pert_zpos,
+                parent_x=parent.x,
+                parent_y=parent.y,
+                parent_z=parent.z,
+                subsystem=children,
+                dt=dt
+                )
 
             return future
         
@@ -1355,14 +1370,14 @@ class Nemesis(object):
             
             if kick_par:
                 corr_chd = CorrectionFromCompoundParticle(
-                                grav_lib=self.lib,
-                                particles=particles,
-                                particles_x=particles_x,
-                                particles_y=particles_y,
-                                particles_z=particles_z,
-                                subsystems=subsystems,
-                                num_of_workers=self.avail_cpus
-                                )
+                    grav_lib=self.lib,
+                    particles=particles,
+                    particles_x=particles_x,
+                    particles_y=particles_y,
+                    particles_z=particles_z,
+                    subsystems=subsystems,
+                    num_of_workers=self.avail_cpus
+                    )
                 self._kick_particles(particles, corr_chd, dt)
                 del corr_chd
 
