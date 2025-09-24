@@ -46,7 +46,8 @@ src/globals.py:
 - `PARENT_RADIUS_MAX`: Maximum allowed parent radius.
 
 src/nemesis.py:
-- In `_sub_worker()`: Number of child workers.
+- In `_sub_worker()`: Number of child workers. Dedicated gravitational solver for subsystems.
+- In `_parent_worker`: Dedicated gravitational solver for parent code.
 
 ### EXAMPLE:
 To run example script, execute `python basic_cluster/particle_initialiser.py` to create an AMUSE particle set. Afterwards, execute `python main.py`.
@@ -54,4 +55,4 @@ To run example script, execute `python basic_cluster/particle_initialiser.py` to
 ### NOTES:
 - Children are initially identified as particles with attribute `syst_id > 0`. Their parents are identified with the same `syst_id` value.
 
-[![Watch Nemesis in action]](https://youtu.be/cycIn8hDZKY)
+[!Watch Nemesis in action](https://youtu.be/cycIn8hDZKY)
