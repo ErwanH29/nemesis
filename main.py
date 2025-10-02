@@ -287,16 +287,7 @@ def run_simulation(particle_set: Particles, tend, dtbridge, dt_diag, code_dt: fl
         f.write(f"\nEnd Time: {t.in_(units.Myr)}")
         f.write(f"\nTime step: {dtbridge.in_(units.Myr)}")
 
-    # Kill all workers
-    for parent_key, code in nemesis.subcodes.items():
-        pid = nemesis._pid_workers[parent_key]
-        nemesis.resume_workers(pid)
-        code.stop()
-
-    if star_evol:
-        nemesis.stellar_code.stop()  
-    nemesis.parent_code.stop()
-
+    nemesis.cleanup_code()
     if (dE_track):
         with open(os.path.join(directory_path, "energy_error.csv"), 'w') as f:
             f.write(f"Energy error: {energy_arr}")

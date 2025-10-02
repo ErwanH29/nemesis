@@ -18,6 +18,7 @@ import signal
 import threading
 import time
 import traceback
+import sys
 
 from amuse.community.huayno.interface import Huayno
 from amuse.community.ph4.interface import Ph4
@@ -143,6 +144,27 @@ class Nemesis(object):
         lib.find_gravity_at_point.restype = None
         return lib
     
+    def cleanup_code(self) -> None:
+        """Cleanup all codes and processes"""
+        if self._verbose:
+            print("...Cleaning up Nemesis...")
+
+        self.parent_code.cleanup_code()
+        self.parent_code.stop()
+        if (self.__star_evol):
+            self.stellar_code.cleanup_code()
+            self.stellar_code.stop()
+
+        for parent_key, (_, code) in self.subcodes.items():
+            pid = self._pid_workers[parent_key]
+            self.resume_workers(pid)
+            code.cleanup_code()
+            code.stop()
+
+        gc.collect()
+        if self._verbose:
+            print("...Nemesis cleaned up...")
+    
     def commit_particles(self) -> None:
         """
         Commit particle system by:
@@ -241,7 +263,10 @@ class Nemesis(object):
             Code:  Gravitational integrator with particle set
         """
         if len(children) == 0:
-            raise ValueError("Error: No children provided.")
+            self.cleanup_code()
+            print("Error: No children provided.")
+            print(f"Traceback: {traceback.format_exc()}")
+            sys.exit()
 
         converter = nbody_system.nbody_to_si(scale_mass, scale_radius)
         number_of_workers = 1
@@ -271,9 +296,12 @@ class Nemesis(object):
                 if 'ph4_worker' in child.name() or 'huayno_worker' in child.name():
                     child_pids.append(child.pid)
             except Exception as e:
+                self.cleanup_code()
                 error = f"Error extracting PID from child process: {child.name()} \n" \
                          "Check if child worker name matches expected name in get_child_pids."
-                raise ValueError(error) from e
+                print(error)
+                print(f"Traceback: {traceback.format_exc()}")
+                sys.exit()
 
         return child_pids
 
@@ -288,9 +316,16 @@ class Nemesis(object):
             try:
                 os.kill(pid, signal.SIGSTOP)
             except ProcessLookupError:
-                raise ProcessLookupError(f"Warning: Process {pid} not found. It may have exited.")
+                self.cleanup_code()
+                print(f"Warning: Process {pid} not found. It may have exited.")
+                print(f"Traceback: {traceback.format_exc()}")
+                sys.exit()
+
             except PermissionError:
-                raise PermissionError(f"Error: Insufficient permissions to stop process {pid}.")
+                self.cleanup_code()
+                print(f"Error: Insufficient permissions to stop process {pid}.")
+                print(f"Traceback: {traceback.format_exc()}")
+                sys.exit()
 
     def resume_workers(self, pid_list: list) -> None:
         """
@@ -304,8 +339,12 @@ class Nemesis(object):
                 os.kill(pid, signal.SIGCONT)
             except ProcessLookupError:
                 print(f"Warning: Process {pid} not found. It may have exited.")
+                print(f"Traceback: {traceback.format_exc()}")
+                sys.exit()
             except PermissionError:
                 print(f"Error: Insufficient permissions to stop process {pid}.")
+                print(f"Traceback: {traceback.format_exc()}")
+                sys.exit()
 
     def _major_channel_maker(self) -> None:
         """Create channels for communication between codes"""
@@ -915,7 +954,10 @@ class Nemesis(object):
                 remnant.radius = planet_radius(remnant.mass)
 
         else:
-            raise ValueError("Error: Asteroid - Asteroid collision")
+            self.cleanup_code()
+            print("Error: Asteroid - Asteroid collision")
+            print(f"Traceback: {traceback.format_exc()}")
+            sys.exit()
         
         print(f"{coll_a.type}, {coll_b.type}")
         print(f"{coll_a.mass.in_(units.MSun)} + {coll_b.mass.in_(units.MSun)} --> {remnant.mass.in_(units.MSun)}")
@@ -1084,7 +1126,7 @@ class Nemesis(object):
                 except Exception as e:
                     print(f"Error while merging {coll_sets}: {e}")
                     print("Traceback:", traceback.format_exc())
-                    exit(-1)
+                    sys.exit()
                     
                 if self.dE_track:
                     E1 = self.calculate_total_energy()
@@ -1110,7 +1152,8 @@ class Nemesis(object):
                     except Exception as e:
                         print(f"Error while merging {coll_sets}: {e}")
                         print("Traceback:", traceback.format_exc())
-                        exit(-1)
+                        sys.exit()
+
                     if self.dE_track:
                         E1 = self.calculate_total_energy()
                         self.corr_energy += E1 - E0
@@ -1233,14 +1276,10 @@ class Nemesis(object):
                 try:
                     future.result()
                 except Exception as e:
-                    print(f"Error while evolving parent key: {e}")
-                    write_set_to_file(
-                        self.subsystems[parent_key][1], 
-                        "temp/error.hdf5", 'amuse', 
-                        close_file=True, 
-                        overwrite_file=True
-                        )
-                    exit(-1)
+                    self.cleanup_code()
+                    print(f"Error while evolving parent {parent_key}: {e}")
+                    print(f"Traceback: {traceback.format_exc()}")
+                    sys.exit()
 
         for parent_key in list(self.subcodes.keys()):  # Remove single children systems:
             pid = self._pid_workers[parent_key]
@@ -1392,7 +1431,7 @@ class Nemesis(object):
                 except Exception as e:
                     print(f"Error submitting job for parent: {e}")
                     print(f"Traceback: {traceback.format_exc()}")
-                    exit(-1)
+                    sys.exit()
 
     @property
     def model_time(self) -> float:  

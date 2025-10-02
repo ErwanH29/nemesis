@@ -7,6 +7,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import traceback
+import sys
 
 from amuse.couple.bridge import CalculateFieldForParticles
 from amuse.lab import constants, units, Particles
@@ -233,6 +234,7 @@ class CorrectionFromCompoundParticle(object):
                     print(f"Parent Particle: {parent}")
                     print(f"System Particles: {system}")
                     print(f"Traceback: {traceback.format_exc()}")
+                    sys.exit()
 
             for future in as_completed(futures):
                 ax, ay, az = future.result()

@@ -8,6 +8,8 @@
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
+import sys
+import traceback
 
 from amuse.datamodel import Particle, Particles, ParticlesOverlay
 from amuse.units import units
@@ -82,7 +84,7 @@ class HierarchicalParticles(ParticlesOverlay):
         return parent
 
     def assign_parent_attributes(
-        self, sys: Particles, parent: Particle, 
+        self, child: Particles, parent: Particle, 
         relative=True, recenter=True
         ) -> None:
         """
@@ -95,10 +97,10 @@ class HierarchicalParticles(ParticlesOverlay):
             recenter (bool):    Flag to recenter the parent
         """
         if not relative:
-            parent.position = 0.*sys[0].position
-            parent.velocity = 0.*sys[0].velocity
+            parent.position = 0.*child[0].position
+            parent.velocity = 0.*child[0].velocity
 
-        massives = sys[sys.mass > (0. | units.kg)]
+        massives = child[child.mass > (0. | units.kg)]
         parent.mass = np.sum(massives.mass)
         try:
             if recenter:
@@ -107,12 +109,14 @@ class HierarchicalParticles(ParticlesOverlay):
 
                 parent.position = com
                 parent.velocity = com_vel
-                sys.position -= com
-                sys.velocity -= com_vel
+                child.position -= com
+                child.velocity -= com_vel
 
         except Exception as e:
-            error_message = f"Error: {e}\nSystem: {sys}"
-            raise AttributeError(error_message)
+            error_message = f"Error: {e}\nSystem: {child}"
+            print(error_message)
+            print(f"Traceback: {traceback.format_exc()}")
+            sys.exit()
 
     def recenter_subsystems(self, max_workers: int) -> None:
         """
