@@ -1225,7 +1225,6 @@ class Nemesis(object):
             code = self.subcodes[parent_key]
             parent = self.subsystems[parent_key][0]
             children = self.subsystems[parent_key][1]
-            channel = self._child_channels[parent_key]
 
             stopping_condition = code.stopping_conditions.collision_detection
             stopping_condition.enable()
@@ -1253,7 +1252,7 @@ class Nemesis(object):
                             E1 = KE + PE
                             self.corr_energy += E1 - E0
             t1 = time.time()
-            channel["from_gravity_to_children"].copy()
+            self._child_channels[parent_key]["from_gravity_to_children"].copy()
             self._cpu_time[parent.key] = t1 - t0
             self.hibernate_workers(self._pid_workers[parent.key])
 
