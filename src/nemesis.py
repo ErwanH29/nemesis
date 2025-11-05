@@ -326,7 +326,6 @@ class Nemesis(object):
                 print(f"Warning: Process {pid} not found. It may have exited.")
                 print(f"Traceback: {traceback.format_exc()}")
                 sys.exit()
-
             except PermissionError:
                 self.cleanup_code()
                 print(f"Error: Insufficient permissions to stop process {pid}.")
@@ -344,10 +343,12 @@ class Nemesis(object):
             try:
                 os.kill(pid, signal.SIGCONT)
             except ProcessLookupError:
+                self.cleanup_code()
                 print(f"Warning: Process {pid} not found. It may have exited.")
                 print(f"Traceback: {traceback.format_exc()}")
                 sys.exit()
             except PermissionError:
+                self.cleanup_code()
                 print(f"Error: Insufficient permissions to stop process {pid}.")
                 print(f"Traceback: {traceback.format_exc()}")
                 sys.exit()
@@ -727,7 +728,7 @@ class Nemesis(object):
                 "offset": offset,
                 "scale_radius": scale_radius,
                 "worker_pid": worker_pid,
-                "children": newparts,  # use copy so we can safely reuse
+                "children": newparts,
                 })
             return result
 
@@ -1128,6 +1129,7 @@ class Nemesis(object):
                 except Exception as e:
                     print(f"Error while merging {coll_sets}: {e}")
                     print("Traceback:", traceback.format_exc())
+                    self.cleanup_code()
                     sys.exit()
                     
                 if self.dE_track:
@@ -1432,6 +1434,7 @@ class Nemesis(object):
                 except Exception as e:
                     print(f"Error submitting job for parent: {e}")
                     print(f"Traceback: {traceback.format_exc()}")
+                    self.cleanup_code()
                     sys.exit()
 
     @property
