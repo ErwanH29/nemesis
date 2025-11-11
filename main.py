@@ -136,7 +136,6 @@ def run_simulation(particle_set: Particles, tend, dtbridge, dt_diag, code_dt: fl
     
     print(f"...Starting Nemesis simulation Run {RUN_IDX}...")
     print(f"Job ID: {os.getpid()}")
-
     if os.path.exists(init_params):
         if verbose:
             print("...Loading from previous simulation...")

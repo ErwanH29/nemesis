@@ -276,7 +276,7 @@ class Nemesis(object):
 
         converter = nbody_system.nbody_to_si(scale_mass, scale_radius)
 
-        code = Huayno(converter)
+        code = Huayno(converter, number_of_workers=number_of_workers)
         code.particles.add_particles(children)
         code.parameters.epsilon_squared = (0. | units.au)**2.
         code.parameters.timestep_parameter = self.__code_dt
@@ -514,18 +514,19 @@ class Nemesis(object):
             self.corr_energy = 0. | units.J
             self.dt_step += 1
 
-            if self.evolve_time == 0. | units.yr:
-                if self.__star_evol:
-                    self._stellar_evolution(timestep/2.)
-                    self._star_channel_copier()
+            if self.evolve_time == 0. | units.yr \
+                and self.__resume_offset == 0. | units.yr:
+                    if self.__star_evol:
+                        self._stellar_evolution(timestep/2.)
+                        self._star_channel_copier()
 
-                self._sync_grav_to_local()
-                self._correction_kicks(
-                    self.particles, 
-                    self.subsystems,
-                    dt=timestep/2.
-                    )
-                kick_corr = timestep/2.
+                    self._sync_grav_to_local()
+                    self._correction_kicks(
+                        self.particles, 
+                        self.subsystems,
+                        dt=timestep/2.
+                        )
+                    kick_corr = timestep/2.
 
             self.old_copy = self.particles.copy()
 
