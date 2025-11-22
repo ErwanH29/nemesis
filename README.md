@@ -77,5 +77,6 @@ To run example script, execute `python basic_cluster/particle_initialiser.py` to
 
 ### NOTES:
 - To setup children at the initial time step, it is required that the particle set contains a `syst_id` attribute whose value is an integer. The set of particles with the same `syst_id` value will be flagged as a subsystem as long as `syst_id` > 0.
+- Since Nemesis relies heavily on frequent stop/start (hibernate/resume) cycles for its child integrators, sockets are used instead of MPI. The persistent stop/start cycles conflict with MPI worker behaviour since MPI workers cannot safely handle repeated suspend/resume signals, especially in large-N simulations where hundreds of worker processes are active. Repeated stop/start operations can lead to workers being incorrectly terminated, crashing the simulation altogether. Socket-based channels, however, can tolerate stop/start cyles because they do not use the tightly coupled, state-sensitive collective semantics of MPI. The problem, however, is that children code are restricted to one core per.
 
 [!Watch Nemesis in action](https://youtu.be/cycIn8hDZKY)
