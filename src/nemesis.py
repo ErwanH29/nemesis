@@ -213,7 +213,7 @@ class Nemesis(object):
             scale_radius = set_parent_radius(scale_mass)
             parent.radius = min(PARENT_RADIUS_MAX, scale_radius)
             if parent not in self.subcodes:
-                code, _, child_PID = self._sub_worker(
+                code, child_PID = self._sub_worker(
                     children=sys, 
                     scale_mass=scale_mass, 
                     scale_radius=scale_radius
@@ -265,7 +265,6 @@ class Nemesis(object):
     def _sub_worker(self, children: Particles, scale_mass, scale_radius, number_of_workers=1):
         """
         Initialise children integrator.
-
         Args:
             children (Particles):         Children systems
             scale_mass (units.mass):      Mass of the system
@@ -280,9 +279,8 @@ class Nemesis(object):
             print(f"Traceback: {traceback.format_exc()}")
             sys.exit()
 
+        converter = nbody_system.nbody_to_si(scale_mass, scale_radius)
         PIDs_before = self._snapshot_worker_pids()
-        converter = nbody_system.nbody_to_si(scale_mass, scale_radius/10.)
-
         code = Huayno(
             converter, 
             number_of_workers=number_of_workers, 
@@ -291,12 +289,12 @@ class Nemesis(object):
         code.particles.add_particles(children)
         code.parameters.epsilon_squared = (0. | units.au)**2.
         code.parameters.timestep_parameter = self.__code_dt
-        code.set_integrator("SHARED4_COLLISIONS")
+        code.set_integrator("SHARED8_COLLISIONS")
 
         PIDs_after = self._snapshot_worker_pids()
         worker_PID = list(PIDs_after - PIDs_before)
 
-        return code, number_of_workers, worker_PID
+        return code, worker_PID
     
     def _set_worker_affinity(self, pid_list):
         """Ensure child workers have access to all visible CPUs."""
@@ -614,64 +612,76 @@ class Nemesis(object):
             if furthest_sq < criteria_sq/4:
                 continue
             
-            components = connected_components_kdtree(subsys, threshold=1.2*criteria)
-            if len(components) > 1:
-                if self._verbose:
-                    print("...Split Detected...")
+            components = connected_components_kdtree(
+                system=subsys, 
+                threshold=1.5*criteria
+                )
+            if len(components) <= 1:
+                continue
+            
+            if self._verbose:
+                print("...Split Detected...")
 
-                par_vel = parent.velocity
+            rework_code = False
+            par_vel = parent.velocity
+            pid = self._pid_workers.pop(parent_key)
+            self.resume_workers(pid)
+            self.particles.remove_particle(parent)
 
-                pid = self._pid_workers.pop(parent_key)
-                self.resume_workers(pid)
-                self.particles.remove_particle(parent)
+            code = self.subcodes.pop(parent_key)
+            offset = self._time_offsets.pop(code)
+            self._child_channels.pop(parent_key)
+            cpu_time = self._cpu_time.pop(parent_key)
+            for c in components:
+                sys = c.as_set()
+                sys.position += par_pos
+                sys.velocity += par_vel
 
-                code = self.subcodes.pop(parent_key)
-                self._time_offsets.pop(code)
-                self._child_channels.pop(parent_key)
-                cpu_time = self._cpu_time.pop(parent_key)
-                for c in components:
-                    sys = c.as_set()
-                    sys.position += par_pos
-                    sys.velocity += par_vel
-
-                    if len(sys) > 1 and max(sys.mass) > (0. | units.kg):
-                        newparent = self.particles.add_subsystem(sys)
-                        newparent_key = newparent.key
-                        scale_mass = newparent.mass
-                        scale_radius = set_parent_radius(scale_mass)
-                        newparent.radius = scale_radius
-
-                        newcode, _, child_PID = self._sub_worker(
+                if len(sys) > 1 and max(sys.mass) > (0. | units.kg):
+                    newparent = self.particles.add_subsystem(sys)
+                    newparent_key = newparent.key
+                    scale_mass = newparent.mass
+                    scale_radius = set_parent_radius(scale_mass)
+                    newparent.radius = scale_radius
+                    if not rework_code:  # Recycle old code
+                        rework_code = True
+                        newcode = code
+                        newcode.particles.remove_particles(code.particles)
+                        newcode.particles.add_particles(sys)
+                        self._time_offsets[newcode] = offset
+                        worker_pid = pid
+                        
+                    else:
+                        newcode, worker_pid = self._sub_worker(
                             children=sys,
                             scale_mass=scale_mass,
                             scale_radius=scale_radius
                             )
-                        self._set_worker_affinity(child_PID)
-                        self._cpu_time[newparent_key] = cpu_time
-                        self.subcodes[newparent_key] = newcode
                         self._time_offsets[newcode] = self.model_time
+                    
+                    self._cpu_time[newparent_key] = cpu_time
+                    self.subcodes[newparent_key] = newcode
 
-                        self._child_channel_maker(
-                            parent_key=newparent_key,
-                            code_particles=newcode.particles,
-                            children=sys
-                        )
-                        self._child_channels[newparent_key]["from_children_to_gravity"].copy()  # More precise
-                        
-                        self._pid_workers[newparent_key] = child_PID
-                        new_pids.append(child_PID)
-                        if len(new_pids) > int(self.avail_cpus // 2):
-                            for pid in new_pids:
-                                self.hibernate_workers(pid)
-                            new_pids.clear()
+                    self._child_channel_maker(
+                        parent_key=newparent_key,
+                        code_particles=newcode.particles,
+                        children=sys
+                    )
+                    self._child_channels[newparent_key]["from_children_to_gravity"].copy()  # More precise
+                    
+                    self._pid_workers[newparent_key] = worker_pid
+                    new_pids.append(worker_pid)
+                    if len(new_pids) > int(self.avail_cpus // 2):
+                        for pid in new_pids:
+                            self.hibernate_workers(pid)
+                        new_pids.clear()
 
-                    else:
-                        new_isolated.add_particles(sys)
-
+                else:
+                    new_isolated.add_particles(sys)
+            
+            if not rework_code:  # Only triggered if pure ionisation
                 code.cleanup_code()
                 code.stop()
-
-                del subsys, parent
 
         for pid in new_pids:
             self.hibernate_workers(pid)
@@ -734,7 +744,7 @@ class Nemesis(object):
             scale_mass = newparts.mass.sum()
             scale_radius = set_parent_radius(scale_mass)
             with self.__lock:
-                newcode, _, child_PID = self._sub_worker(
+                newcode, child_PID = self._sub_worker(
                     children=newparts,
                     scale_mass=scale_mass,
                     scale_radius=scale_radius,
