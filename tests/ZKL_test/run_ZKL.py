@@ -4,7 +4,7 @@ from main import run_simulation
 
 IC_file = glob.glob("tests/ZKL_test/data/ICs/*")[0]
 run_simulation(
-    particle_set=IC_file, 
+    IC_file=IC_file, 
     run_idx=0,
     tend=10 | units.Myr, 
     dtbridge=500 | units.yr,

@@ -178,7 +178,7 @@ def run_simulation(
         current_mergers = 0
         snapshot_no = 0
         create_output_directories(directory_path)
-        snapshot_path, particle_set = setup_simulation(directory_path, particle_set)
+        snapshot_path, particle_set = setup_simulation(directory_path, IC_file)
         if (gal_field):
             particle_set = configure_galactic_frame(particle_set)
     
