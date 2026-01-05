@@ -287,35 +287,30 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
 def plot_energy(dir_df, nem_df):
     """Plot the energy evolution of the system"""
     dE_array = [[ ] for _ in range(2)]  # Direct, Nemesis
-    
     for i, data_files in enumerate([dir_df, nem_df]):
         for j, snapshot in enumerate(data_files):
             print(f"\rProcessing file {j+1}/{len(data_files)}", end=" ", flush=True)
             p = read_set_from_file(snapshot)
             massives = p[p.mass > 0. | units.kg]
-            if i == 0:
+            if j == 0:
                 E0 = massives.kinetic_energy() + massives.potential_energy()
             else:
                 Et = massives.kinetic_energy() + massives.potential_energy()
                 dE = abs((Et - E0)/E0)
                 dE_array[i].append(dE)
 
-    smoothing = 5
-    value = np.cumsum(dE_array[1], dtype=np.float64)
-    value[smoothing:] = value[smoothing:] - value[:-smoothing]
-    dE_array[1] = value[smoothing-1:] / smoothing
-
     fig, ax = plt.subplots(figsize=(7, 6))
     for i, df in enumerate(dE_array):
-        time = np.linspace(0, 0.1, len(df))
-        ax.plot(time, df, color=COLOURS[i], lw=3)
+        time = np.linspace(0, 0.05, len(df))
+        ax.plot(time, df, color=COLOURS[i], lw=3-i)
+        print(df)
     ax.scatter(None, None, color=COLOURS[0], label=LABELS[0], s=50)
     ax.scatter(None, None, color=COLOURS[1], label=LABELS[1], s=50)
     ax.set_xlabel(r"$t$ [Myr]", fontsize=AXLABEL_SIZE)
     ax.set_ylabel(r"$\Delta E / E_0$", fontsize=AXLABEL_SIZE)
     tickers(ax)
     ax.set_yscale("log")
-    ax.set_xlim(0, 1)
+    ax.set_xlim(0, 0.05)
     ax.legend(fontsize=AXLABEL_SIZE, frameon=False)
     plt.savefig(f"{SAVE_DIR}/energy.pdf", dpi=300, bbox_inches='tight')
     plt.clf()
@@ -350,8 +345,8 @@ if dm.max() > (0. | units.MSun):
     )
 print("...Simulation has same IC confirmed.")
 
-#print(f"...Plotting dE...")
-#plot_energy(dir_data, nem_data)
+print(f"...Plotting dE...")
+plot_energy(dir_data, nem_data)
 
 print(f"...Comparing visually...")
 compare_visually(dir_data, nem_data)
