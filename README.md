@@ -71,25 +71,45 @@ src/nemesis.py:
 To run example script, execute `python basic_cluster/particle_initialiser.py` to create an AMUSE particle set. Afterwards, execute `python main.py`.
 
 ### TESTS:
-An example Nemesis test is provided, comparing its performance relative to N-body integrators in capturing the von Zeipel-Lidov-Kozai effect.
+Two example Nemesis test is provided. Both compare its performance relative to N-body integrators, with one focusing on the von Zeipel-Lidov-Kozai effect and the other a typical cluster simulation.
+
+##### For ZKL:
 To run this test follow:
 - Set-up initial conditions: `python /tests/ZKL_test/initialise_LZK.py`
 - To run Nemesis: `python /tests/ZKL_test/run_ZKL.py`
 - To plot results: `python/tests/ZKL_test/plot_ZKL.py`
 
 Some vital notes regarding the test:
-- At times, `Huayno` is unable to capture the LZK effect. These are some suggested parameters:
+- These are some suggested parameters:
     - In `nemesis._parent_worker`, use `Huayno` as parent integrator with mode `SHARED10_COLLISIONS`.
     - In `nemesis._sub_worker`, use `Huayno` as children integrator with mode `SHARED10_COLLISIONS`.
-    - In `nemesis._sub_worker` set child converter with `scale_radius/10.`
-    - End time: 10 Myr
-    - Bridge time: 500 yr
-    - Diagnostic time: 5000 yr
-    - Code internal time-step: 0.1
-    - Turn off galactic field + stellar evolution
+    - In `nemesis._sub_worker` set child converter with `scale_radius / 10`.
+    - End time: 10 Myr.
+    - Bridge time: 500 yr.
+    - Diagnostic time: 5000 yr.
+    - Code internal time-step: 0.1.
+    - Turn off galactic field + stellar evolution.
     - Change `PARENT_RADIUS_COEFF` in `src/globals` to 1e-5 au, 100 au and 1000 au.
-    - Turn off children collisions
+    - Turn off children collisions.
 Make sure that the parent and child code is the same integrator. This allows testing the performance of the child split algorithm vs. non-splitting scenarios.
+
+##### For Cluster run:
+To run this test follow:
+- Set-up initial conditions: `python /tests/cluster_test/initialise_cluster.py`
+- To run Nemesis: `python /tests/cluster_test/run_cluster.py` with the flag `RUN_NEMESIS = 1`
+- To run direct N-body code: `python /tests/cluster_test/run_cluster.py` with the flag `RUN_NEMESIS = 0`
+- To plot results: `python/tests/cluster_test/plot_cluster.py`
+
+Some vital notes regarding the test:
+- Ensure that both parent and child integrator within `Nemesis` are the same. This should also be an identical integrator to that selected during the direct N-body runs. Additionally, make sure all code parameters (i.e converter, internal time-step...) are identical to ease comparison. A good code to use for this test is `Ph4` since the cluster initialised contains test particles by default and `Ph4` is able to handle such a demographic efficiently. Some advice for `Nemesis` parameters:
+    - In `nemesis._parent_worker`, use `Ph4` as parent integrator.
+    - In `nemesis._sub_worker`, use `Ph4` as children integrator.
+    - End time: 0.1 Myr -- Deviation will occur due to chaos. This is a short enough time to allow any systematic errors to emerge but not too short for chaos to greatly affect integration.
+    - Bridge time: 500 yr
+    - Diagnostic time: 10000 yr
+    - Code internal time-step: 0.1
+    - Turn off galactic field + stellar evolution -- This will allow a better comparison in performance on the gravitational side of `Nemesis`.
+    - Turn off children collisions
 
 ### Example Scientific Runs
 - [van Elteren et al. 2019: Survivability of planetary systems in young

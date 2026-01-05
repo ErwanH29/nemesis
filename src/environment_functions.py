@@ -17,12 +17,7 @@ def connected_components_kdtree(system: Particles, threshold) -> list:
     Returns:
         list: A list of connected component in form of AMUSE particles
     """
-    coords = np.vstack([
-        system.x.value_in(units.m),
-        system.y.value_in(units.m),
-        system.z.value_in(units.m)
-    ]).T
-
+    coords = system.position.value_in(units.m)
     dist_criteria = threshold.value_in(units.m)
     clustering = DBSCAN(
         eps=dist_criteria,
@@ -34,9 +29,7 @@ def connected_components_kdtree(system: Particles, threshold) -> list:
 
     labels = clustering.labels_
     unique_labels = set(labels)
-
-    cc_parts = [system[labels == label] for label in unique_labels]
-    return cc_parts
+    return [system[labels == label] for label in unique_labels]
 
 def galactic_frame(parent_set: Particles, dx, dy, dz, dvx, dvy, dvz) -> Particles:
     """
