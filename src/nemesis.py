@@ -589,7 +589,7 @@ class Nemesis(object):
             par_rad = parent.radius
             components = connected_components_kdtree(
                 system=subsys,
-                threshold=CONNECTED_COEFF/2. * par_rad
+                threshold=CONNECTED_COEFF * par_rad
                 )
             if len(components) <= 1:
                 continue
