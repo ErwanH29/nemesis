@@ -109,10 +109,15 @@ def setup_simulation(dir_path: str, particle_set: Particles) -> tuple:
     return snapshot_path, particle_set
 
 def run_simulation(
-    IC_file: str, run_idx: int, 
-    tend, dtbridge, dt_diag, code_dt: float,
-    dE_track: bool, gal_field: bool, 
-    star_evol: bool, verbose: bool
+    IC_file: str, 
+    run_idx: int, 
+    tend, dtbridge, 
+    dt_diag, 
+    code_dt: float,
+    dE_track: bool, 
+    gal_field: bool, 
+    star_evol: bool, 
+    verbose: bool
     ) -> None:
     """
     Run simulation and output data.
@@ -130,9 +135,12 @@ def run_simulation(
     """
     sim_dir = IC_file.split("ICs/")[0]
     if "tests" in IC_file:
-        from src.globals import PARENT_RADIUS_COEFF
-        rpar_in_au = int(PARENT_RADIUS_COEFF.value_in(units.au))
-        directory_path = os.path.join(sim_dir, f"ZKL_Rpar{rpar_in_au}au")
+        if "ZKL" in IC_file:
+            from src.globals import PARENT_RADIUS_COEFF
+            rpar_in_au = int(PARENT_RADIUS_COEFF.value_in(units.au))
+            directory_path = os.path.join(sim_dir, f"ZKL_Rpar{rpar_in_au}au")
+        else:
+            directory_path = os.path.join(sim_dir, f"cluster_run_nemesis")
     else:
         directory_path = os.path.join(sim_dir, f"Nrun{run_idx}")
     init_params = os.path.join(directory_path, 'sim_stats', f'initial_conditions_{run_idx}.txt')
@@ -209,13 +217,13 @@ def run_simulation(
     )
 
     for id_ in np.unique(bounded_systems.syst_id):
+        print(f"\rAdding subsystem with syst_id = {id_}", end="", flush=True)
         subsystem = particle_set[particle_set.syst_id == id_]
         newparent = nemesis.particles.add_subsystem(subsystem)
         newparent.radius = set_parent_radius(newparent.mass)
 
     nemesis.particles.add_particles(parents)
     nemesis.commit_particles()
-    nemesis.split_subcodes()  # Check for any splits at t=0
     if (nemesis.dE_track):
         energy_arr = []
         E0 = nemesis.calculate_total_energy()
