@@ -28,8 +28,7 @@ src/build/
 data/
 
 # Example-generated IC/output dirs (if you keep generating them there)
-examples/*/initial_particles/
-examples/*/N*/
+examples/
 
 # Generated media / results (your policy)
 *.pdf
