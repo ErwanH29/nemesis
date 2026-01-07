@@ -5,7 +5,7 @@ from main import run_simulation
 
 
 IC_file = glob.glob("tests/cluster_test/data/ICs/*")[0]
-RUN_NEMESIS = 0
+RUN_NEMESIS = 1
 
 tend = 0.05 | units.Myr
 dt = 500 | units.yr
