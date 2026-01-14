@@ -26,11 +26,9 @@ src/build/
 
 # Nemesis runtime outputs
 data/
+examples/Nrun*
 
-# Example-generated IC/output dirs (if you keep generating them there)
-examples/
-
-# Generated media / results (your policy)
+# Generated media / results
 *.pdf
 *.png
 *.mp4

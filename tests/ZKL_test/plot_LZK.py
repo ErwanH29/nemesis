@@ -41,9 +41,9 @@ def tickers(ax) -> plt.axis:
     return ax
 
 def plot_LZK():
-    nem_1e0au = natsort.natsorted(glob.glob(f"tests/ZKL_test/data/ZKL_Rpar0au/simulation_snapshot/*"))[::10]
-    nem_1e3au = natsort.natsorted(glob.glob(f"tests/ZKL_test/data/ZKL_Rpar1000au/simulation_snapshot/*"))[::10]
-    nem_1e2au = natsort.natsorted(glob.glob(f"tests/ZKL_test/data/ZKL_Rpar100au/simulation_snapshot/*"))[::10]
+    nem_1e0au = natsort.natsorted(glob.glob(f"tests/ZKL_test/data/ZKL_Rpar0au/simulation_snapshot/*"))
+    nem_1e3au = natsort.natsorted(glob.glob(f"tests/ZKL_test/data/ZKL_Rpar1000au/simulation_snapshot/*"))
+    nem_1e2au = natsort.natsorted(glob.glob(f"tests/ZKL_test/data/ZKL_Rpar100au/simulation_snapshot/*"))
     Nsnaps = min(len(nem_1e0au), len(nem_1e3au), len(nem_1e2au))
     
     nem_1e0au = nem_1e0au[:Nsnaps]
