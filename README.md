@@ -30,7 +30,7 @@ Runs can be **resumed automatically**, provided diagnostic parameters (`dtbridge
 3. **Generate initial condiitons**. For instance: <br />
     ```cd examples/```
     ```python basic_cluster/particle_initialiser.py```
-    This will create a particle set with several planetary systems. The particle set are always saved in a folder ```initial_particles/```.
+    This will create a particle set with several planetary systems. The particle set are always saved in a folder ```ICs/```.
 4. **Run simulation**. From the project root: <br />
     ```python main.py```
    If, instead, you wish to simulate your system for 1 Myr with a bridge time step of 100 yr:
@@ -39,39 +39,40 @@ Runs can be **resumed automatically**, provided diagnostic parameters (`dtbridge
 
 ### Repository structure
 - `main.py`: Run code to simulate your system.
+- `examples/`: Folders with several examples initialising particles set to be run.
 - `src/environment_functions.py`: Script containing various functions to define different environment properties.
 - `src/globals.py`: All global constants and magic numbers used in the simulation.
 - `src/grav_correctors.py`: Force correction routines to synchronise the micro- and macrostates (synchronise parent with children).
 - `src/hierarchical_particles.py`: Script to categorise particles into parents and children.
 - `src/nemesis.py`: Script hosting the evolution procedure.
-- `examples/`: Folders with several examples initialising particles set to be run.
+- `tests/`: Folders with several test examples.
 
 ### Free parameters: 
 In addition to the input functions needed to execute `interface.py`, the following may vary depending on your simulation:
 
 main.py:
-- `galactic_frame()`: The phase-space coordinates. Default is centered about a Milky Way-like galaxy.
+- `galactic_frame()`: The phase-space coordinates of the particles embedded within an analytical galactic potential. Default is centered about a Milky Way-like galaxy.
 - `RUN_IDX`: The system realisation within your `initial_particles/` directory wished to simulate.
 
 src/globals.py:
 - `ASTEROID_RADIUS`: Collision radius for asteroid (test) particles.
 - `CONNECTED_COEFF`: Threshold for detecting particles within a subsystem that are ejected.
 - `EPS`: Tolerance with which models have successfully integrated to required time step.
-- `GRAV_THRESHOLD`: Threshold for modifying the parent particle radius in case it is relatively isolated.
+- `GRAV_THRESHOLD`: Threshold for modifying the parent particle radius in case it is relatively isolated. This not currently being used.
 - `MIN_EVOL_MASS`: The minimum mass for a particle to be flagged for stellar evolution.
 - `PARENT_NWORKER`: Number of workers for parent integrator.
 - `PARENT_RADIUS_COEFF`: Pre-factor influencing the parent particle radius.
 - `PARENT_RADIUS_MAX`: Maximum allowed parent particle radius.
 
 src/nemesis.py:
-- `_sub_worker()`: Number of child workers. Dedicated gravitational solver for subsystems.
+- `_sub_worker()`: Number of child workers. Current `AMUSE` functionalities forces this variable to remain fixed to `number_of_workers = 1`. Dedicated gravitational solver for subsystems. 
 - `_parent_worker`: Dedicated gravitational solver for parent code.
 
 ### EXAMPLE:
 To run example script, execute `python basic_cluster/particle_initialiser.py` to create an AMUSE particle set. Afterwards, execute `python main.py`.
 
 ### TESTS:
-Two example Nemesis test is provided. Both compare its performance relative to N-body integrators, with one focusing on the von Zeipel-Lidov-Kozai effect and the other a typical cluster simulation.
+Two example Nemesis test is provided. Running these not only provide a way to gauge if any modifcations alter the physics in ways not wished for, but also allow one to familiarise themselves with the algorithm. Both compare its performance relative to N-body integrators, with one focusing on the von Zeipel-Lidov-Kozai (ZLK) effect and the other a typical cluster simulation.
 
 ##### For ZKL:
 To run this test follow:
@@ -98,7 +99,7 @@ To run this test follow:
 - Set-up initial conditions: `python /tests/cluster_test/initialise_cluster.py`
 - To run Nemesis: `python /tests/cluster_test/run_cluster.py` with the flag `RUN_NEMESIS = 1`
 - To run direct N-body code: `python /tests/cluster_test/run_cluster.py` with the flag `RUN_NEMESIS = 0`
-- To plot results: `python/tests/cluster_test/plot_cluster.py`
+- To plot results: `python /tests/cluster_test/plot_cluster.py`
 
 Some vital notes regarding the test:
 - Ensure that both parent and child integrator within `Nemesis` are the same. This should also be an identical integrator to that selected during the direct N-body runs. Additionally, make sure all code parameters (i.e converter, internal time-step...) are identical to ease comparison. A good code to use for this test is `Ph4` since the cluster initialised contains test particles by default and `Ph4` is able to handle such a demographic efficiently. Some advice for `Nemesis` parameters:

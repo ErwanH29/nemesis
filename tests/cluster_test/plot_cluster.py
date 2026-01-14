@@ -5,6 +5,8 @@ import natsort
 import glob
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
+import matplotlib.colors as colors
+import matplotlib.patheffects as pe
 import numpy as np
 import os
 from scipy import stats
@@ -235,25 +237,71 @@ def plot_cluster_cdf(dir_data, nem_data):
 
 
 def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
+    """
+    Plot CDFs of asteroid semi-major axis and eccentricity from
+    direct N-body and Nemesis simulations.
+    Args:
+        dir_sma_ast (list):  List of semi-major axis from direct N-body.
+        dir_ecc_ast (list):  List of eccentricities from direct N-body.
+        nem_sma_ast (list):  List of semi-major axis from Nemesis.
+        nem_ecc_ast (list):  List of eccentricities from Nemesis.
+    """
     data_dic = {
         "sma": [[dir_sma_ast, nem_sma_ast], r"$a$ [au]", [2, 1e5]],
         "ecc": [[dir_ecc_ast, nem_ecc_ast], r"$e$", [1e-3, 1]]
     }
+    res_df = [[ ] for _ in range(2)]  # SMA, Ecc
     for i, (fname, (df, xlabel, xlims)) in enumerate(data_dic.items()):
-        fig, ax = plt.subplots(figsize=(7, 6))
+        fig, axs = plt.subplots(
+            2, 1, 
+            figsize=(6, 6), 
+            sharex=True,
+            gridspec_kw={
+                "height_ratios": [1, 3],
+                "wspace": 0.0,
+                "hspace": 0.05
+            }
+        )
         for j, data in enumerate(df):
             sorted_data = np.sort(data)
             sample_data = np.arange(1, len(sorted_data)+1) / len(sorted_data)
-            ax.plot(sorted_data, sample_data, lw=LW[j], color=COLOURS[j])
-            ax.scatter([], [], color=COLOURS[j], label=LABELS[j], s=50)
-        ax.set_xlabel(xlabel, fontsize=AXLABEL_SIZE)
-        ax.set_ylabel(r"$f_{<}$", fontsize=AXLABEL_SIZE)
-        ax.legend(fontsize=AXLABEL_SIZE+5, frameon=False)
-        ax.set_ylim(0, 1.)
-        ax.set_xlim(xlims)
-        tickers(ax)
+            axs[1].plot(sorted_data, sample_data, lw=2, color=COLOURS[j])
+            axs[1].scatter([], [], color=COLOURS[j], label=LABELS[j], s=50)
+        
+        sorted_nem = np.sort(df[1])
+        sample_nem = np.arange(1, len(sorted_nem)+1) / len(sorted_nem)
+        sorted_dir = np.sort(df[0])
+        sample_dir = np.arange(1, len(sorted_dir)+1) / len(sorted_dir)
+        xmin = max(sorted_dir.min(), sorted_nem.min())
+        xmax = min(sorted_dir.max(), sorted_nem.max())
+
+        x_common = np.linspace(xmin, xmax, 1000)
+        dir_i = np.interp(x_common, sorted_dir, sample_dir)
+        nem_i = np.interp(x_common, sorted_nem, sample_nem)
+        residuals = nem_i - dir_i
+
+        res_df[0].append(x_common)
+        res_df[1].append(residuals)
+
+        axs[0].plot(x_common, residuals, color="gray", lw=2)
+        axs[0].set_ylabel(r"$\Delta y$", fontsize=AXLABEL_SIZE)
+        if i == 0:
+            axs[0].axvline(2*100*2**(1/3), color="red", ls="--", lw=2)
+            axs[0].axvline(100*2**(1/3), color="black", ls="--", lw=2)
+            axs[0].axvline(100*0.5**(1/3), color="black", ls="--", lw=2)
+
+        axs[1].set_xlabel(xlabel, fontsize=AXLABEL_SIZE)
+        axs[1].set_ylabel(r"$f_{<}$", fontsize=AXLABEL_SIZE)
+        axs[1].legend(fontsize=AXLABEL_SIZE+5, frameon=False)
+        axs[1].set_ylim(0, 1.)
+        axs[1].set_xlim(xlims)
+        for ax in axs:
+            tickers(ax)
         if i==0:
-            ax.set_xscale("log")
+            for ax in axs:
+                ax.set_xscale("log")
+            axs[0].set_xlim(xmin, xmax)
+        axs[0].set_ylim(-0.015, 0.015)
         plt.savefig(f"{SAVE_DIR}/cdf_{fname}.pdf", dpi=300, bbox_inches='tight')
         plt.clf()
         plt.close()
@@ -282,6 +330,119 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
         c_alpha = np.sqrt(-0.5 * np.log(alpha / 2))
         D_alpha = c_alpha * np.sqrt((n1 + n2) / (n1 * n2))
         print(f"D_obs = {D_obs}, D_alpha (alpha={alpha})= {D_alpha}")
+
+
+def plot_ast_residual(dir_data, nem_data):
+    """
+    Save direct N-body and Nemesis integration eccentricity and 
+    semi-major axis data of asteroids.
+    Args:
+        dir_data (list):  List of data files assosciated to direct integration runs.
+        nem_data (list):  List of data files assosciated to Nemesis runs.
+    """
+    initial_nem = read_set_from_file(nem_data[0])
+    host_dic = {}
+    for system_id in np.unique(initial_nem.syst_id):
+        system = initial_nem[initial_nem.syst_id == system_id]
+        if system_id > 0:
+            host = system[system.mass.argmax()]
+            asteroids = system[system.mass == 0. | units.kg]
+            host_dic[host.original_key] = asteroids.original_key
+    
+    dt_dir = read_set_from_file(dir_data[-1])
+    dt_nem = read_set_from_file(nem_data[-1])
+    ast_dir = dt_dir[dt_dir.mass == 0. | units.kg]
+
+    data = [ ]
+    for i, (host_key, system_key) in enumerate(host_dic.items()):
+        host_dir = dt_dir[dt_dir.original_key == host_key]
+        host_nem = dt_nem[dt_nem.original_key == host_key]
+
+        for a_key in system_key:
+            ### First deal with Direct data
+            target = ast_dir[ast_dir.original_key == a_key]
+            binary = Particles(particles=[host_dir, target])
+            kepler_elements = orbital_elements(binary, G=constants.G)
+            sma, ecc = kepler_elements[2], kepler_elements[3]
+            if kepler_elements[3] <= 1.:
+                sma_value_dir = sma.value_in(units.au)
+                ecc_value_dir = ecc
+
+            ### Then deal with Nemesis data
+            target = dt_nem[dt_nem.original_key == a_key]
+            binary = Particles(particles=[host_nem, target])
+            kepler_elements = orbital_elements(binary, G=constants.G)
+            sma, ecc = kepler_elements[2], kepler_elements[3]
+            if kepler_elements[3] <= 1.:
+                sma_value_nem = sma.value_in(units.au)
+                ecc_value_nem = ecc
+            
+            if ecc_value_nem <= 1. and ecc_value_dir <= 1.:
+                data.append((
+                    sma_value_dir, ecc_value_dir, 
+                    sma_value_nem, ecc_value_nem
+                ))
+
+    arr = np.asarray(data)
+    a_dir, e_dir, _, e_nem = arr.T
+
+    sma_dir_log = np.log10(a_dir)
+    xbins = np.linspace(np.log10(5), sma_dir_log.max(), 15)
+    ybins = np.linspace(0, 1.0, 15)
+
+    decc = e_nem - e_dir
+    N, xedges, yedges = np.histogram2d(sma_dir_log, e_dir, bins=[xbins, ybins])
+
+    Z, xedges, yedges, _ = stats.binned_statistic_2d(
+        sma_dir_log, e_dir, decc,
+        statistic='median',
+        bins=[xbins, ybins]
+    )
+    Z = np.where(N >= 1, Z, np.nan)
+    
+    fig, ax = plt.subplots(figsize=(7, 6))
+    tickers(ax)
+    pcm = ax.pcolormesh(
+        10**xedges, yedges, Z.T, 
+        cmap='coolwarm_r',
+        norm=colors.CenteredNorm(0)
+    )
+
+    ### Overplot number counts
+    x_centers = 0.5 * (xedges[:-1] + xedges[1:])
+    y_centers = 0.5 * (yedges[:-1] + yedges[1:])
+    for ix, xc in enumerate(x_centers):
+        for iy, yc in enumerate(y_centers):
+            count = int(N[ix, iy])
+            if count == 0 or count > 10:
+                continue
+            ax.text(
+                10**xc, yc, f"{count}",
+                ha="center", va="center",
+                color="white",
+                fontsize=AXLABEL_SIZE,
+                path_effects=[pe.withStroke(linewidth=1.5, foreground="black")]
+            )
+
+    cbar = plt.colorbar(pcm, ax=ax)
+    cbar.set_label(label=r"$\Delta e$", fontsize=AXLABEL_SIZE)
+    cbar.ax.tick_params(labelsize=AXLABEL_SIZE)
+    ax.set_xlabel(r"$a [{\rm au}]$", fontsize=AXLABEL_SIZE)
+    ax.set_ylabel(r"$e$", fontsize=AXLABEL_SIZE)
+    ax.set_ylim(0, 1)
+    ax.set_xscale("log")
+    ax.set_xlim(10**xbins[0], 10**xbins[-1])
+    
+    y = np.linspace(0, 1, 100)
+    Rlink_max = [2*100*2**(1/3) / (1 + i) for i in y]
+    Rpar_max = [100*2**(1/3) / (1 + i) for i in y]
+    Rpar_min = [100*0.5**(1/3) / (1 + i) for i in y]
+    ax.plot(Rlink_max, y, color="red")
+    ax.plot(Rpar_max, y, color="black")
+    ax.plot(Rpar_min, y, color="black")
+    plt.savefig(f"{SAVE_DIR}/residual_ecc.pdf", dpi=300, bbox_inches='tight')
+    plt.clf()
+    plt.close()
 
 
 def plot_energy(dir_df, nem_df):
@@ -354,8 +515,12 @@ compare_visually(dir_data, nem_data)
 print("...Cluster Overall CDF Plots...")
 plot_cluster_cdf(dir_data, nem_data)
 
-print("...Plotting Asteroid CDFs")
+print("...Processing Asteroids...")
 direct_df, nemesis_df = process_data(dir_data, nem_data)
+
+print(f"...Asteroids Residuals Plot...")
+plot_ast_residual(dir_data, nem_data)
+
 print(f"...Asteroids CDF Plots...")
 plot_ast_cdf(
     direct_df[0], 
