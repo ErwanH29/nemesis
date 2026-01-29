@@ -545,7 +545,7 @@ class Nemesis(object):
 
             self._sync_grav_to_local()
             self._correction_kicks(
-                self.particles, 
+                self.particles,
                 self.subsystems,
                 dt=timestep
                 )
@@ -1078,7 +1078,7 @@ class Nemesis(object):
         """
         if self._verbose:
             print("...Drifting Global...")
-            print(f"Evolving until: {dt.in_(units.Myr)}")
+            print(f"Evolving {len(self.particles)} until: {dt.in_(units.Myr)}")
 
         self.old_copy = self.particles.copy()
         self.old_keys = self.old_copy.key

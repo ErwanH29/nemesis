@@ -254,7 +254,7 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
     for i, (fname, (df, xlabel, xlims)) in enumerate(data_dic.items()):
         fig, axs = plt.subplots(
             2, 1, 
-            figsize=(6, 6), 
+            figsize=(6, 5), 
             sharex=True,
             gridspec_kw={
                 "height_ratios": [1, 3],
@@ -262,6 +262,13 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
                 "hspace": 0.05
             }
         )
+
+        axs[0].axhline(0, color="black", lw=1, zorder=0)
+        if i == 0:
+            axs[0].axvline(2*100*2**(1/3), color="red", lw=1)
+            axs[0].axvline(100*2**(1/3), color="black", lw=1)
+            axs[0].axvline(100*0.5**(1/3), color="black", lw=1)
+
         for j, data in enumerate(df):
             sorted_data = np.sort(data)
             sample_data = np.arange(1, len(sorted_data)+1) / len(sorted_data)
@@ -285,10 +292,6 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
 
         axs[0].plot(x_common, residuals, color="gray", lw=2)
         axs[0].set_ylabel(r"$\Delta y$", fontsize=AXLABEL_SIZE)
-        if i == 0:
-            axs[0].axvline(2*100*2**(1/3), color="red", ls="--", lw=2)
-            axs[0].axvline(100*2**(1/3), color="black", ls="--", lw=2)
-            axs[0].axvline(100*0.5**(1/3), color="black", ls="--", lw=2)
 
         axs[1].set_xlabel(xlabel, fontsize=AXLABEL_SIZE)
         axs[1].set_ylabel(r"$f_{<}$", fontsize=AXLABEL_SIZE)
@@ -301,7 +304,9 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
             for ax in axs:
                 ax.set_xscale("log")
             axs[0].set_xlim(xmin, xmax)
-        axs[0].set_ylim(-0.015, 0.015)
+        res_lims = axs[0].get_ylim()
+        max_y = max(abs(res_lims[0]), abs(res_lims[1]))
+        axs[0].set_ylim(-max_y, max_y)
         plt.savefig(f"{SAVE_DIR}/cdf_{fname}.pdf", dpi=300, bbox_inches='tight')
         plt.clf()
         plt.close()
@@ -387,11 +392,11 @@ def plot_ast_residual(dir_data, nem_data):
     a_dir, e_dir, _, e_nem = arr.T
 
     sma_dir_log = np.log10(a_dir)
-    xbins = np.linspace(np.log10(5), sma_dir_log.max(), 15)
+    xbins = np.linspace(np.log10(4), np.log10(1000), 15)
     ybins = np.linspace(0, 1.0, 15)
 
     decc = e_nem - e_dir
-    N, xedges, yedges = np.histogram2d(sma_dir_log, e_dir, bins=[xbins, ybins])
+    N, _, _ = np.histogram2d(sma_dir_log, e_dir, bins=[xbins, ybins])
 
     Z, xedges, yedges, _ = stats.binned_statistic_2d(
         sma_dir_log, e_dir, decc,
@@ -414,7 +419,7 @@ def plot_ast_residual(dir_data, nem_data):
     for ix, xc in enumerate(x_centers):
         for iy, yc in enumerate(y_centers):
             count = int(N[ix, iy])
-            if count == 0 or count > 10:
+            if count == 0 or count >= 10:
                 continue
             ax.text(
                 10**xc, yc, f"{count}",
@@ -462,7 +467,7 @@ def plot_energy(dir_df, nem_df):
 
     fig, ax = plt.subplots(figsize=(7, 6))
     for i, df in enumerate(dE_array):
-        time = np.linspace(0, 0.05, len(df))
+        time = np.linspace(0, 0.1, len(df))
         ax.plot(time, df, color=COLOURS[i], lw=3-i)
         print(df)
     ax.scatter(None, None, color=COLOURS[0], label=LABELS[0], s=50)
@@ -505,7 +510,7 @@ if dm.max() > (0. | units.MSun):
         f" Maximum dm = {dm.max().in_(units.MSun)}"
     )
 print("...Simulation has same IC confirmed.")
-
+"""
 print(f"...Plotting dE...")
 plot_energy(dir_data, nem_data)
 
@@ -514,7 +519,7 @@ compare_visually(dir_data, nem_data)
 
 print("...Cluster Overall CDF Plots...")
 plot_cluster_cdf(dir_data, nem_data)
-
+"""
 print("...Processing Asteroids...")
 direct_df, nemesis_df = process_data(dir_data, nem_data)
 

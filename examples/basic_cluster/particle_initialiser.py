@@ -8,16 +8,19 @@ import numpy as np
 import os
 
 
-def get_plummer_density(particles, scale_radius):
+def _get_plummer_density(particles, scale_radius, fraction=1):
     """
-    Calculate Plummer density for each particle
+    Calculate Plummer density for each particle. Assume
+    you want the density at the scale radius.
     Args:
         particles (Particles): Particle set
+        scale_radius (float):  Plummer scale radius
+        fraction (float):      Fraction of scale radius to calculate density
     """
     cluster_mass = particles.mass.sum()
-    numerator = 3 * cluster_mass * scale_radius**2
-    denominator = 4 * np.pi * (2 * scale_radius**2)**(5/2)
-    density = numerator / denominator
+    volume_at_scale = (4/3) * np.pi * scale_radius**3
+    plummer_coeff = (1 + (fraction)**2)**(5/2)
+    density = cluster_mass / (volume_at_scale * plummer_coeff)
     print("Plummer density:", density.in_(units.MSun / units.pc**3))
 
 
@@ -78,6 +81,8 @@ def rotate(position, velocity, phi, theta, psi):
         )
         
 
+
+### Create star cluster with planetary systems ###
 Nparents = 200
 Nchildren = 10
 rvir = 0.5 | units.pc
@@ -94,8 +99,7 @@ bodies.mass = masses
 bodies.scale_to_standard(convert_nbody=converter, virial_ratio=0.5)
 bodies.radius = ZAMS_radius(bodies.mass)
 bodies.syst_id = -1
-
-get_plummer_density(bodies, rvir)
+_get_plummer_density(bodies, rvir)
 
 solar_systems = bodies.random_sample(Nchildren)
 for i, host in enumerate(solar_systems):

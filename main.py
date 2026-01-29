@@ -33,11 +33,9 @@ def create_output_directories(dir_path: str):
         dir_path (str):  Simulation directory path.
     """
     subdirs = [
-        "event_data", 
         "collision_snapshot",
         "sim_stats",
-        "simulation_snapshot",
-        "temp"
+        "simulation_snapshot"
     ]
     for subdir in subdirs:
         os.makedirs(os.path.join(dir_path, subdir), exist_ok=True)
@@ -55,7 +53,17 @@ def load_particle_set(ic_file: str) -> Particles:
         raise ValueError(f"Error: Particle set {ic_file} is empty.")
     particle_set.coll_events = 0
     particle_set.move_to_center()
-    particle_set.original_key = particle_set.key
+    particle_set.original_key = particle_set.key    
+
+    # Ensure no orphaned syst_id > 0 (i.e., positive system IDs with only 1 particle)
+    syst_ids = particle_set.syst_id
+
+    ids, counts = np.unique(syst_ids[syst_ids > 0], return_counts=True)
+    orphan_ids = ids[counts == 1]
+    if orphan_ids.size:
+        mask = np.isin(syst_ids, orphan_ids)
+        assert mask.sum() == orphan_ids.size, "Error: Check if all select systems truly are lonely."
+        particle_set[mask].syst_id = -1
     return particle_set
 
 def configure_galactic_frame(particle_set: Particles) -> Particles:

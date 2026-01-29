@@ -77,7 +77,7 @@ Two example Nemesis test is provided. Running these not only provide a way to ga
 ##### For ZKL:
 To run this test follow:
 - Set-up initial conditions: `python /tests/ZKL_test/initialise_LZK.py`
-- To run Nemesis: `python /tests/ZKL_test/run_ZKL.py`
+- To run Nemesis: `python -m tests.ZKL_test.run_ZKL`
 - To plot results: `python/tests/ZKL_test/plot_ZKL.py`
 
 Some vital notes regarding the test:
@@ -97,8 +97,8 @@ Make sure that the parent and child code is the same integrator. This allows tes
 ##### For Cluster run:
 To run this test follow:
 - Set-up initial conditions: `python /tests/cluster_test/initialise_cluster.py`
-- To run Nemesis: `python /tests/cluster_test/run_cluster.py` with the flag `RUN_NEMESIS = 1`
-- To run direct N-body code: `python /tests/cluster_test/run_cluster.py` with the flag `RUN_NEMESIS = 0`
+- To run Nemesis: `python -m tests.cluster_test.run_cluster` with the flag `RUN_NEMESIS = 1`
+- To run direct N-body code: `python -m tests.cluster_test.run_cluster` with the flag `RUN_NEMESIS = 0`
 - To plot results: `python /tests/cluster_test/plot_cluster.py`
 
 Some vital notes regarding the test:
