@@ -41,9 +41,9 @@ def tickers(ax) -> plt.axis:
     return ax
 
 def plot_LZK():
-    nem_1e0au = natsort.natsorted(glob.glob(f"tests/ZKL_test/data/ZKL_Rpar0au/simulation_snapshot/*"))
-    nem_1e3au = natsort.natsorted(glob.glob(f"tests/ZKL_test/data/ZKL_Rpar1000au/simulation_snapshot/*"))
-    nem_1e2au = natsort.natsorted(glob.glob(f"tests/ZKL_test/data/ZKL_Rpar100au/simulation_snapshot/*"))
+    nem_1e0au = natsort.natsorted(glob.glob(f"tests/ZKL_test/data/ZKL_Rpar0au/simulation_snapshot/*"))[5:]
+    nem_1e3au = natsort.natsorted(glob.glob(f"tests/ZKL_test/data/ZKL_Rpar1000au/simulation_snapshot/*"))[5:]
+    nem_1e2au = natsort.natsorted(glob.glob(f"tests/ZKL_test/data/ZKL_Rpar100au/simulation_snapshot/*"))[5:]
     Nsnaps = min(len(nem_1e0au), len(nem_1e3au), len(nem_1e2au))
     
     nem_1e0au = nem_1e0au[:Nsnaps]
@@ -100,7 +100,7 @@ def plot_LZK():
         "ecc": [ecc_df, r"$1 - e_{\rm in}$"],
         "inc": [inc_df, r"$i_{\rm tot}$ [$\degree$]"]
     }
-    time = [5000/1e6 * j for j in range(len(nem_1e0au))]  # In Myr
+    time = [500/1e6 * j for j in range(len(nem_1e0au))]  # In Myr
     for fig_name, data in data_dic.items():
         df = data[0]
         ylabel = data[1]

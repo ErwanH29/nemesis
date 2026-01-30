@@ -202,8 +202,11 @@ def run_simulation(
     major_bodies = identify_parents(particle_set)
     if len(major_bodies) > 2:
         Rvir = major_bodies.virial_radius()
+    elif "ZKL" in IC_file:
+        dr = (particle_set[1].position - particle_set[0].position).lengths()
+        Rvir = dr.max()
     else:
-        Rvir = (particle_set[1:].position - particle_set[0].position).lengths().max()
+        raise ValueError("Error: Are you sure you want to simulate with < two parents only?.")
     conv_par = nbody_system.nbody_to_si(np.sum(major_bodies.mass), Rvir)
 
     # Setting up system

@@ -160,12 +160,12 @@ def process_data(dir_data, nem_data):
             target = ast_dir[ast_dir.original_key == a_key]
             binary = Particles(particles=[host_dir, target])
             _save_kepler(binary, temp_dir_df[0], temp_dir_df[1])
-            
+
             ### Then deal with Nemesis data
             target = dt_nem[dt_nem.original_key == a_key]
             binary = Particles(particles=[host_nem, target])
             _save_kepler(binary, temp_nem_df[0], temp_nem_df[1])
-
+    print(f"#Sample Direct={len(temp_dir_df[0])}, #Sample Nemesis={len(temp_nem_df[0])}")
     return temp_dir_df, temp_nem_df
 
 
@@ -303,7 +303,7 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
         if i==0:
             for ax in axs:
                 ax.set_xscale("log")
-            axs[0].set_xlim(xmin, xmax)
+            axs[0].set_xlim(xmin, 2. * xmax)
         res_lims = axs[0].get_ylim()
         max_y = max(abs(res_lims[0]), abs(res_lims[1]))
         axs[0].set_ylim(-max_y, max_y)
@@ -510,7 +510,7 @@ if dm.max() > (0. | units.MSun):
         f" Maximum dm = {dm.max().in_(units.MSun)}"
     )
 print("...Simulation has same IC confirmed.")
-"""
+
 print(f"...Plotting dE...")
 plot_energy(dir_data, nem_data)
 
@@ -519,12 +519,9 @@ compare_visually(dir_data, nem_data)
 
 print("...Cluster Overall CDF Plots...")
 plot_cluster_cdf(dir_data, nem_data)
-"""
+
 print("...Processing Asteroids...")
 direct_df, nemesis_df = process_data(dir_data, nem_data)
-
-print(f"...Asteroids Residuals Plot...")
-plot_ast_residual(dir_data, nem_data)
 
 print(f"...Asteroids CDF Plots...")
 plot_ast_cdf(
@@ -533,3 +530,6 @@ plot_ast_cdf(
     nemesis_df[0], 
     nemesis_df[1]
 )
+
+print(f"...Asteroids Residuals Plot...")
+plot_ast_residual(dir_data, nem_data)
