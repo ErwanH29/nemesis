@@ -50,8 +50,7 @@ from src.environment_functions import connected_components_kdtree, set_parent_ra
 from src.environment_functions import planet_radius, ZAMS_radius
 from src.globals import ASTEROID_RADIUS, CONNECTED_COEFF, EPS
 from src.globals import MIN_EVOL_MASS, PARENT_RADIUS_MAX, PARENT_NWORKER
-from src.grav_correctors import CorrectionFromCompoundParticle
-from src.grav_correctors import CorrectionForCompoundParticle
+from src.grav_correctors import CorrectionKicks
 from src.hierarchical_particles import HierarchicalParticles
 
 
@@ -120,7 +119,9 @@ class Nemesis(object):
 
         self._major_channel_maker()
         self._validate_initialization()
-        self.lib = self._load_grav_lib()
+        self.CorrKicks = CorrectionKicks(
+            self._load_grav_lib(), self.avail_cpus
+            )
 
     def _validate_initialization(self) -> None:
         """Validate initialised variables of the class"""
@@ -485,26 +486,28 @@ class Nemesis(object):
             channel["from_star_to_children"].copy()
             self.hibernate_workers(pid)
 
-    def _sync_grav_to_local(self) -> None:
+    def _sync_grav_to_local(self, child_sync=True) -> None:
         """Sync gravity particles to local set"""
         self.channels["from_gravity_to_parents"].copy()
-        pid_dictionary = self._pid_workers
-        for parent_key, channel in self._child_channels.items():
-            pid = pid_dictionary[parent_key]
-            self.resume_workers(pid)
-            channel["from_gravity_to_children"].copy()
-            self.hibernate_workers(pid)
+        if child_sync:
+            pid_dictionary = self._pid_workers
+            for parent_key, channel in self._child_channels.items():
+                pid = pid_dictionary[parent_key]
+                self.resume_workers(pid)
+                channel["from_gravity_to_children"].copy()
+                self.hibernate_workers(pid)
 
-    def _sync_local_to_grav(self) -> None:
+    def _sync_local_to_grav(self, child_sync=True) -> None:
         """Sync local particle set to global integrator"""
         self.particles.recenter_subsystems(max_workers=self.avail_cpus)
         self.channels["from_parents_to_gravity"].copy()
-        pid_dictionary = self._pid_workers
-        for parent_key, channel in self._child_channels.items():
-            pid = pid_dictionary[parent_key]
-            self.resume_workers(pid)
-            channel["from_children_to_gravity"].copy()
-            self.hibernate_workers(pid)
+        if child_sync:
+            pid_dictionary = self._pid_workers
+            for parent_key, channel in self._child_channels.items():
+                pid = pid_dictionary[parent_key]
+                self.resume_workers(pid)
+                channel["from_children_to_gravity"].copy()
+                self.hibernate_workers(pid)
 
     def evolve_model(self, tend, timestep=None):
         """
@@ -522,42 +525,34 @@ class Nemesis(object):
             self.corr_energy = 0. | units.J
             self.dt_step += 1
 
-            if self.evolve_time == 0. | units.yr \
-                and self.__resume_offset == 0. | units.yr:
-                    if self.__star_evol:
-                        self._stellar_evolution(timestep/2.)
-                        self._star_channel_copier()
+            if (self.evolve_time + self.__resume_offset) == 0. | units.yr:
+                if self.__star_evol:
+                    self._stellar_evolution(timestep/2.)
+                    self._star_channel_copier()
+            else:
+                self.CorrKicks._correction_kicks(
+                    self.particles,
+                    self.subsystems,
+                    dt=timestep
+                )
 
-                    self._sync_grav_to_local()
-                    self._correction_kicks(
-                        self.particles, 
-                        self.subsystems,
-                        dt=timestep/2.
-                        )
-                    kick_corr = timestep/2.
-
+            ### Drift step
             self._drift_global(
                 self.model_time + timestep,
                 corr_time=kick_corr
                 )
             if self.subcodes:
                 self._drift_child(self.model_time)
-
             self._sync_grav_to_local()
-            self._correction_kicks(
-                self.particles, 
-                self.subsystems,
-                dt=timestep
-                )
-            self._sync_local_to_grav()
+
+            ### Star evolution
             if (self.__star_evol):
                 self._stellar_evolution(self.model_time + timestep/2.)
                 self._star_channel_copier()
-            self.split_subcodes()
-            self.channels["from_parents_to_gravity"].copy()
 
-        del self.old_copy
-        gc.collect()
+            self._sync_local_to_grav()
+            self.split_subcodes()
+            self._sync_local_to_grav(child_sync=False)
 
         if self._verbose:
             print(f"Time: {self.model_time.in_(units.Myr)}")
@@ -675,7 +670,6 @@ class Nemesis(object):
         Reverse kicks are applied to children systems, and new offset is.
         previous timestep.
         """
-        self._sync_grav_to_local()
         particle_keys = self.particles.key
         for parent_key, old_parent_set in self._coll_parents.items():
             code = None
@@ -688,11 +682,10 @@ class Nemesis(object):
                 children_set = self._coll_children[parent_key]
 
                 # Apply reverse kicks (this is thread-safe if internal state is not shared)
-                self._correction_kicks(
+                self.CorrKicks._correction_kicks(
                     old_parent_set,
                     children_set,
                     dt=-corr_time,
-                    kick_par=False,
                 )
 
                 newparts = Particles()
@@ -741,7 +734,7 @@ class Nemesis(object):
                 code.particles.remove_particles(code.particles)
                 code.particles.add_particles(newparts)
                 newcode = code
-                
+
             self._set_worker_affinity(worker_pid)
             new_parent = self.particles[particle_keys == parent_key][0]
             new_parent.radius = min(scale_radius, PARENT_RADIUS_MAX)
@@ -1078,7 +1071,7 @@ class Nemesis(object):
         """
         if self._verbose:
             print("...Drifting Global...")
-            print(f"Evolving until: {dt.in_(units.Myr)}")
+            print(f"Evolving {len(self.particles)} until: {dt.in_(units.Myr)}")
 
         self.old_copy = self.particles.copy()
         self.old_keys = self.old_copy.key
@@ -1261,144 +1254,6 @@ class Nemesis(object):
 
             else:
                 self.hibernate_workers(pid)
-
-    def _kick_particles(self, particles: Particles, corr_code, dt) -> None:
-        """
-        Apply correction kicks onto target particles/
-        Args:
-            particles (Particles):  Particles whose accelerations are corrected
-            corr_code (Code):  Object providing the difference in gravity
-            dt (units.time):   Time-step of correction kick
-        """
-        ax, ay, az = corr_code.get_gravity_at_point(
-            particles.radius,
-            particles.x, 
-            particles.y, 
-            particles.z
-            )
-
-        particles.velocity[:,0] += dt * ax
-        particles.velocity[:,1] += dt * ay
-        particles.velocity[:,2] += dt * az
-        
-        del corr_code, ax, ay, az
-
-    def _correct_children(
-            self, 
-            perturber_mass, 
-            perturber_x, 
-            perturber_y, 
-            perturber_z,
-            parent_x, 
-            parent_y, 
-            parent_z, 
-            subsystem: Particles, dt
-            ) -> None:
-        """
-        Apply correcting kicks onto children particles.
-        Args:
-            perturber_mass (units.mass):  Mass of perturber
-            perturber_x (units.length):  X-position of perturber
-            perturber_y (units.length):  Y-position of perturber
-            perturber_z (units.length):  Z-position of perturber
-            parent_x (units.length):     X-position of parent
-            parent_y (units.length):     Y-position of parent
-            parent_z (units.length):     Z-position of parent
-            subsystem (Particles):       Children particle set
-            dt (units.time):             Time interval for applying kicks
-        """
-        subsystem_x = subsystem.x + parent_x
-        subsystem_y = subsystem.y + parent_y
-        subsystem_z = subsystem.z + parent_z
-        
-        corr_par = CorrectionForCompoundParticle(
-            grav_lib=self.lib,
-            parent_x=parent_x,
-            parent_y=parent_y,
-            parent_z=parent_z, 
-            system=subsystem,
-            system_x=subsystem_x,
-            system_y=subsystem_y,
-            system_z=subsystem_z, 
-            perturber_mass=perturber_mass,
-            perturber_x=perturber_x,
-            perturber_y=perturber_y,
-            perturber_z=perturber_z,
-            )
-        self._kick_particles(subsystem, corr_par, dt)
-       
-    def _correction_kicks(
-            self, 
-            particles: Particles, 
-            subsystems: dict, dt, 
-            kick_par=True
-            ) -> None:
-        """
-        Apply correcting kicks onto children and parent particles.
-        Args:
-            particles (Particles):  Parent particle set
-            subsystems (dict):      Dictionary of children system
-            dt (units.time):        Time interval for applying kicks
-            kick_par (boolean):     Whether to apply correction to parents
-        """
-        def process_children_jobs(parent, children):
-            removed_idx = abs(particles_mass - parent.mass).argmin()
-            mask = np.ones(len(particles_mass), dtype=bool)
-            mask[removed_idx] = False
-            
-            pert_mass = particles_mass[mask]
-            pert_xpos = particles_x[mask]
-            pert_ypos = particles_y[mask]
-            pert_zpos = particles_z[mask]
-
-            future = executor.submit(
-                self._correct_children,
-                perturber_mass=pert_mass,
-                perturber_x=pert_xpos,
-                perturber_y=pert_ypos,
-                perturber_z=pert_zpos,
-                parent_x=parent.x,
-                parent_y=parent.y,
-                parent_z=parent.z,
-                subsystem=children,
-                dt=dt
-                )
-
-            return future
-        
-        if subsystems and len(particles) > 1:
-            # Setup array for CorrectionFor
-            particles_mass = particles.mass
-            particles_x = particles.x
-            particles_y = particles.y
-            particles_z = particles.z
-            
-            if kick_par:
-                corr_chd = CorrectionFromCompoundParticle(
-                    grav_lib=self.lib,
-                    particles=particles,
-                    particles_x=particles_x,
-                    particles_y=particles_y,
-                    particles_z=particles_z,
-                    subsystems=subsystems,
-                    num_of_workers=self.avail_cpus
-                    )
-                self._kick_particles(particles, corr_chd, dt)
-                del corr_chd
-
-            futures = []
-            with ThreadPoolExecutor(max_workers=self.avail_cpus) as executor:
-                try:
-                    for parent, children in subsystems.values():
-                        future = process_children_jobs(parent, children)
-                        futures.append(future)
-                    for future in as_completed(futures):
-                        future.result()
-                except Exception as e:
-                    print(f"Error submitting job for parent: {e}")
-                    print(f"Traceback: {traceback.format_exc()}")
-                    self.cleanup_code()
-                    sys.exit()
 
     @property
     def model_time(self) -> float:  

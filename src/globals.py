@@ -11,6 +11,7 @@ PARENT_NWORKER = 1
 PARENT_RADIUS_COEFF = 100. | units.au
 PARENT_RADIUS_MAX = 2000. | units.au
 
+ACC_UNITS = units.m / units.s**2
 SI_UNITS = (1. | units.kg * units.m**-2.) * constants.G
 START_TIME = time.time()
 

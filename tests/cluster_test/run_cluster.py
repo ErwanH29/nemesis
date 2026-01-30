@@ -7,7 +7,7 @@ from main import run_simulation
 IC_file = glob.glob("tests/cluster_test/data/ICs/*")[0]
 RUN_NEMESIS = 1
 
-tend = 0.05 | units.Myr
+tend = 0.1 | units.Myr
 dt = 500 | units.yr
 dt_diag = 10000 | units.yr
 code_dt = 0.1
@@ -43,15 +43,16 @@ else:
     particle_set = read_set_from_file(
         f"{data_dir}/cluster_run_nemesis/simulation_snapshot/snap_0.hdf5"
     )
+    major_bodies = particle_set[particle_set.mass > 0.08 | units.MSun]
 
     converter = nbody_system.nbody_to_si(
-        particle_set.mass.sum(), 
-        particle_set.virial_radius()
+        major_bodies.mass.sum(), 
+        major_bodies.virial_radius()
         )
     code = Ph4(converter, number_of_workers=4)
-    code.parameters.epsilon_squared = (1 | units.au)**2.
-    code.parameters.timestep_parameter = 0.1
     code.particles.add_particles(particle_set)
+    code.parameters.epsilon_squared = (1 | units.au)**2.
+    code.parameters.timestep_parameter = code_dt
     channel = code.particles.new_channel_to(particle_set)
 
     snapshot_dir = f"{out_dir}/simulation_snapshot/snap_{{}}.hdf5"
