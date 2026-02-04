@@ -202,8 +202,8 @@ class Nemesis(object):
             self.stellar_code.particles.add_particle(self.stars)
 
         particles.radius = set_parent_radius(particles.mass)
-        ntotal = len(self.subsystems.keys())
-        for nsyst, (parent_key, (parent, sys)) in enumerate(self.subsystems.items()):
+        ntotal = len(self.children.keys())
+        for nsyst, (parent_key, (parent, sys)) in enumerate(self.children.items()):
             if self._verbose:
                 print(f"\r...Committing system {nsyst+1}/{ntotal}...", end="", flush=True)
             sys.move_to_center()
@@ -220,7 +220,7 @@ class Nemesis(object):
 
                 self._set_worker_affinity(child_pid)
                 self._time_offsets[code] = self.model_time
-                self.subsystems[parent_key] = (parent, sys)
+                self.children[parent_key] = (parent, sys)
                 self.subcodes[parent_key] = code
                 self._child_channel_maker(
                     parent_key=parent_key, 
@@ -233,7 +233,7 @@ class Nemesis(object):
                 self._pid_workers[parent_key] = child_pid
                 self.hibernate_workers(child_pid)
 
-        self.particles.recenter_subsystems(max_workers=self.avail_cpus)
+        self.particles.recenter_children(max_workers=self.avail_cpus)
         if (self.__gal_field):
             self._setup_bridge()
         else:
@@ -246,7 +246,7 @@ class Nemesis(object):
         gravity.timestep = self.__dt
         self._evolve_code = gravity
 
-    def _stellar_worker(self) -> SeBa:
+    def _stellar_worker(self):
         """Define stellar evolution integrator"""
         return SeBa()
 
@@ -276,15 +276,15 @@ class Nemesis(object):
         
         converter = nbody_system.nbody_to_si(scale_mass, scale_radius)
         PIDs_before = self._snapshot_worker_pids()
-        code = Huayno(
+        code = Ph4(#Huayno(
             converter, 
             number_of_workers=number_of_workers, 
             channel_type="sockets"
             )
         code.particles.add_particles(children)
-        code.parameters.epsilon_squared = (0. | units.au)**2.
+        code.parameters.epsilon_squared = (1. | units.au)**2.
         code.parameters.timestep_parameter = self.__code_dt
-        code.set_integrator("SHARED10_COLLISIONS")
+        #code.set_integrator("SHARED10_COLLISIONS")
 
         PIDs_after = self._snapshot_worker_pids()
         worker_PID = list(PIDs_after - PIDs_before)
@@ -499,7 +499,7 @@ class Nemesis(object):
 
     def _sync_local_to_grav(self, child_sync=True) -> None:
         """Sync local particle set to global integrator"""
-        self.particles.recenter_subsystems(max_workers=self.avail_cpus)
+        self.particles.recenter_children(max_workers=self.avail_cpus)
         self.channels["from_parents_to_gravity"].copy()
         if child_sync:
             pid_dictionary = self._pid_workers
@@ -527,12 +527,12 @@ class Nemesis(object):
 
             if (self.evolve_time + self.__resume_offset) == 0. | units.yr:
                 if self.__star_evol:
-                    self._stellar_evolution(timestep/2.)
+                    self._stellar_evolution(0.5 * timestep)
                     self._star_channel_copier()
             else:
                 self.CorrKicks._correction_kicks(
                     self.particles,
-                    self.subsystems,
+                    self.children,
                     dt=timestep
                 )
 
@@ -547,7 +547,7 @@ class Nemesis(object):
 
             ### Star evolution
             if (self.__star_evol):
-                self._stellar_evolution(self.model_time + timestep/2.)
+                self._stellar_evolution(self.model_time + 0.5 * timestep)
                 self._star_channel_copier()
 
             self._sync_local_to_grav()
@@ -580,7 +580,7 @@ class Nemesis(object):
             print("...Checking Splits...")
 
         new_isolated = Particles()
-        for parent_key, (parent, subsys) in list(self.subsystems.items()):
+        for parent_key, (parent, subsys) in list(self.children.items()):
             par_rad = parent.radius
             components = connected_components_kdtree(
                 system=subsys,
@@ -611,7 +611,7 @@ class Nemesis(object):
 
                 has_massive = (len(sys) > 1) and np.any(sys.mass.value_in(units.kg) > 0.0)
                 if has_massive:
-                    newparent = self.particles.add_subsystem(sys)
+                    newparent = self.particles.add_children(sys)
                     newparent_key = newparent.key
                     scale_mass = newparent.mass
                     scale_radius = set_parent_radius(scale_mass)
@@ -738,7 +738,7 @@ class Nemesis(object):
             self._set_worker_affinity(worker_pid)
             new_parent = self.particles[particle_keys == parent_key][0]
             new_parent.radius = min(scale_radius, PARENT_RADIUS_MAX)
-            self.particles.assign_subsystem(new_parent, newparts)
+            self.particles.assign_children(new_parent, newparts)
 
             if code is None:
                 self._time_offsets[newcode] = offset
@@ -776,12 +776,12 @@ class Nemesis(object):
             par_key = particle.key
             new_par.add_particle(particle)
 
-            if par_key in self.subsystems:  # Not merged yet and hosts children
+            if par_key in self.children:  # Not merged yet and hosts children
                 if self._verbose:
                     print(f"First time Parent {par_key} merging. Has children...")
 
                 ## Remove all references, keep system dynamically younger
-                _, children = self.subsystems.pop(par_key)
+                _, children = self.children.pop(par_key)
 
                 ## Store old attributes for reverse kicks
                 old_parent = self.old_copy[self.old_keys == par_key]
@@ -970,7 +970,7 @@ class Nemesis(object):
                 children.position += parent.position
                 children.velocity += parent.velocity
 
-                newparent = self.particles.add_subsystem(children)
+                newparent = self.particles.add_children(children)
                 newparent_key = newparent.key
                 newparent.radius = parent.radius
 
@@ -1179,8 +1179,8 @@ class Nemesis(object):
             """
             self.resume_workers(self._pid_workers[parent_key])
             code = self.subcodes[parent_key]
-            parent = self.subsystems[parent_key][0]
-            children = self.subsystems[parent_key][1]
+            parent = self.children[parent_key][0]
+            children = self.children[parent_key][1]
 
             stopping_condition = code.stopping_conditions.collision_detection
             stopping_condition.enable()
@@ -1261,7 +1261,7 @@ class Nemesis(object):
         return self.parent_code.model_time
 
     @property
-    def subsystems(self) -> dict:
+    def children(self) -> dict:
         """Extract the children system"""
         return self.particles.collection_attributes.subsystems
 
@@ -1274,5 +1274,5 @@ class Nemesis(object):
             - One worker for main process
             - Leave one free for good measure
         """
-        ncpu = min(len(self.subsystems), self.__total_free_cpus - self.__par_nworker - 3)
+        ncpu = min(len(self.children), self.__total_free_cpus - self.__par_nworker - 3)
         return max(1, ncpu)  # Ensure at least one CPU is available

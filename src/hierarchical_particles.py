@@ -1,6 +1,6 @@
 
 ############################## NOTES ##############################
-# Recentering subsystems is optimised. Even without GIL release, 
+# Recentering children is optimised. Even without GIL release, 
 # overhead of multiprocessing is too consuming. Most likely the 
 # AMUSE-based arrays (position/velocity) are already wrapped around 
 # NumPy arrays.
@@ -38,9 +38,9 @@ class HierarchicalParticles(ParticlesOverlay):
 
         return _parts
 
-    def assign_subsystem(self, parent: Particle, child: Particles) -> None:
+    def assign_children(self, parent: Particle, child: Particles) -> None:
         """
-        Assign subsystem to parent particle. No reshifting needed
+        Assign children to parent particle. No reshifting needed
         Args:
             parent (Particle):  The parent particle.
             child (Particles):  The child system particle set.
@@ -49,7 +49,7 @@ class HierarchicalParticles(ParticlesOverlay):
             raise TypeError("child must be an instance of Particles")
 
         if not isinstance(parent, Particle):
-            self.add_subsystem(child)
+            self.add_children(child)
 
         if len(child) == 1:
             return self.add_particles(child)[0]
@@ -57,9 +57,9 @@ class HierarchicalParticles(ParticlesOverlay):
         self.collection_attributes.subsystems[parent.key] = (parent, child)
         return parent
     
-    def add_subsystem(self, child: Particles, recenter=True) -> Particle:
+    def add_children(self, child: Particles, recenter=True) -> Particle:
         """
-        Create a parent from particle subsystem.
+        Create a parent from particle children.
         Args:
             child (Particles):  The child system particle set.
             recenter (bool):    Flag to recenter the parent.
@@ -85,7 +85,7 @@ class HierarchicalParticles(ParticlesOverlay):
         relative=True, recenter=True
         ) -> None:
         """
-        Create parent from subsystem attributes.
+        Create parent from children attributes.
         Args:
             child (Particles):  The child system particle set.
             parent (Particle):  The parent particle.
@@ -114,9 +114,9 @@ class HierarchicalParticles(ParticlesOverlay):
             print(f"Traceback: {traceback.format_exc()}")
             sys.exit()
 
-    def recenter_subsystems(self, max_workers: int) -> None:
+    def recenter_children(self, max_workers: int) -> None:
         """
-        Recenter subsystems.
+        Recenter children.
         Args:
             max_workers (int):  Number of cores to use.
         """
@@ -185,8 +185,8 @@ class HierarchicalParticles(ParticlesOverlay):
         parts = self.copy()
         parts.syst_id = -1
 
-        subsystems = self.collection_attributes.subsystems
-        for system_id, (parent, child) in enumerate(subsystems.values()):
+        children = self.collection_attributes.subsystems
+        for system_id, (parent, child) in enumerate(children.values()):
             parts.remove_particle(parent)
 
             subsys = parts.add_particles(child)

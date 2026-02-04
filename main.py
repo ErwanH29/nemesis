@@ -88,7 +88,7 @@ def identify_parents(particle_set: Particles) -> Particles:
     """
     Identify parents in particle set. These are either:
         - Isolated particles (syst_id < 0).
-        - Hosts of subsystem (max mass in system).
+        - Hosts of children (max mass in system).
     Args:
         particle_set (Particles):  The particle set.
     Returns:
@@ -228,9 +228,9 @@ def run_simulation(
     )
 
     for id_ in np.unique(bounded_systems.syst_id):
-        print(f"\rAdding subsystem with syst_id = {id_}", end="", flush=True)
-        subsystem = particle_set[particle_set.syst_id == id_]
-        newparent = nemesis.particles.add_subsystem(subsystem)
+        print(f"\rAdding children with syst_id = {id_}", end="", flush=True)
+        children = particle_set[particle_set.syst_id == id_]
+        newparent = nemesis.particles.add_children(children)
         newparent.radius = set_parent_radius(newparent.mass)
 
     nemesis.particles.add_particles(parents)
@@ -251,7 +251,7 @@ def run_simulation(
     with open(init_params, 'w') as f:
         f.write(f"Simulation Parameters:\n")
         f.write(f"  Total number of particles: {len(particle_set)}\n")
-        f.write(f"  Total number of initial subsystems: {bounded_systems.syst_id.max()}\n")
+        f.write(f"  Total number of initial children: {bounded_systems.syst_id.max()}\n")
         f.write(f"  Diagnostic timestep: {dt_diag.in_(units.yr)}\n")
         f.write(f"  Bridge timestep: {dtbridge.in_(units.yr)}\n")
         f.write(f"  End time: {tend.in_(units.Myr)}\n")
@@ -344,7 +344,7 @@ def new_option_parser():
     result.add_option("--code_dt", 
                       dest="code_dt", 
                       type="float", 
-                      default=0.1,
+                      default=0.03,
                       help="Gravitational integrator internal timestep")
     result.add_option("--dt_diag", 
                       dest="dt_diag", 
@@ -393,7 +393,6 @@ if __name__ == "__main__":
             f"Error: Run index {run_idx} out of range. \n"
             f"Available particle sets: {initial_particles}."
             )
-
     run_simulation(
         IC_file=IC_file, 
         run_idx=run_idx,

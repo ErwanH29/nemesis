@@ -9,7 +9,7 @@ GRAV_THRESHOLD = 5.e-3
 MIN_EVOL_MASS = 0.08 | units.MSun
 PARENT_NWORKER = 1
 PARENT_RADIUS_COEFF = 100. | units.au
-PARENT_RADIUS_MAX = 2000. | units.au
+PARENT_RADIUS_MAX = 1000. | units.au
 
 ACC_UNITS = units.m / units.s**2
 SI_UNITS = (1. | units.kg * units.m**-2.) * constants.G
