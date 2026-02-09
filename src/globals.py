@@ -2,6 +2,7 @@ import time
 from amuse.ext.galactic_potentials import MWpotentialBovy2015
 from amuse.lab import constants, units
 
+
 ASTEROID_RADIUS = 10. | units.km
 CONNECTED_COEFF = 2.
 EPS = 1.e-8
@@ -9,7 +10,7 @@ GRAV_THRESHOLD = 5.e-3
 MIN_EVOL_MASS = 0.08 | units.MSun
 PARENT_NWORKER = 1
 PARENT_RADIUS_COEFF = 100. | units.au
-PARENT_RADIUS_MAX = 300. | units.au
+PARENT_RADIUS_MAX = 500. | units.au
 
 ACC_UNITS = units.m / units.s**2
 SI_UNITS = (1. | units.kg * units.m**-2.) * constants.G

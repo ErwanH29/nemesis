@@ -59,7 +59,7 @@ class HierarchicalParticles(ParticlesOverlay):
     
     def add_children(self, child: Particles, recenter=True) -> Particle:
         """
-        Create a parent from particle children.
+        Create a parent particle from children.
         Args:
             child (Particles):  The child system particle set.
             recenter (bool):    Flag to recenter the parent.
@@ -81,8 +81,11 @@ class HierarchicalParticles(ParticlesOverlay):
         return parent
 
     def assign_parent_attributes(
-        self, child: Particles, parent: Particle, 
-        relative=True, recenter=True
+        self, 
+        child: Particles, 
+        parent: Particle, 
+        relative=True, 
+        recenter=True
         ) -> None:
         """
         Create parent from children attributes.
@@ -123,7 +126,6 @@ class HierarchicalParticles(ParticlesOverlay):
         def calculate_com(parent_pos, parent_vel, system: Particles) -> tuple:
             """
             Calculate and shift system relative to center of mass.
-
             Args:
                 parent_pos (units.length):    Parent particle position.
                 parent_vel (units.velocity):  Parent particle velocity.
@@ -166,7 +168,6 @@ class HierarchicalParticles(ParticlesOverlay):
     def remove_particles(self, parts: Particles) -> None:
         """
         Remove particles from particle set.
-
         Args:
             parts (Particles):  The particle to remove.
         """
@@ -189,9 +190,9 @@ class HierarchicalParticles(ParticlesOverlay):
         for system_id, (parent, child) in enumerate(children.values()):
             parts.remove_particle(parent)
 
-            subsys = parts.add_particles(child)
-            subsys.position += parent.position
-            subsys.velocity += parent.velocity
-            subsys.syst_id = system_id + 1
+            child_set = parts.add_particles(child)
+            child_set.position += parent.position
+            child_set.velocity += parent.velocity
+            child_set.syst_id = system_id + 1
 
         return parts

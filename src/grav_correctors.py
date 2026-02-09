@@ -6,7 +6,6 @@
  
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
-import traceback
 import sys
 
 from amuse.couple.bridge import CalculateFieldForParticles

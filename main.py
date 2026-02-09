@@ -8,6 +8,7 @@
 #       - Simon Portegies Zwart (spz@strw.leidenuniv.nl)
 ###########################################################################
 
+
 import glob
 from natsort import natsorted
 import numpy as np
@@ -53,7 +54,7 @@ def load_particle_set(ic_file: str) -> Particles:
         raise ValueError(f"Error: Particle set {ic_file} is empty.")
     particle_set.coll_events = 0
     particle_set.move_to_center()
-    particle_set.original_key = particle_set.key    
+    particle_set.original_key = particle_set.key
 
     # Ensure no orphaned syst_id > 0 (i.e., positive system IDs with only 1 particle)
     syst_ids = particle_set.syst_id
@@ -70,7 +71,7 @@ def configure_galactic_frame(particle_set: Particles) -> Particles:
     """
     Shift particle set to galactocentric reference frame.
     Args:
-        particle_set (particles):  The particle set.
+        particle_set (Particles):  The particle set.
     Returns:
         Particles: Particle set with galactocentric coordinates.
     """
@@ -92,13 +93,13 @@ def identify_parents(particle_set: Particles) -> Particles:
     Args:
         particle_set (Particles):  The particle set.
     Returns:
-        Particles:  Parents (Lonely + Host) in particle set. 
-        Host are identified as the most massive object in the system.
+        Particles:  Parents (Lonely + Host) in particle set.
     """
-    parents = particle_set[particle_set.syst_id <= 0]
-    system_ids = np.unique(particle_set.syst_id[particle_set.syst_id > 0])
+    system_id_arr = particle_set.syst_id
+    parents = particle_set[system_id_arr <= 0]
+    system_ids = np.unique(system_id_arr[system_id_arr > 0])
     for system_id in system_ids:
-        system = particle_set[np.flatnonzero(particle_set.syst_id == system_id)]
+        system = particle_set[np.flatnonzero(system_id_arr == system_id)]
         parents += system[np.argmax(system.mass)]
 
     return parents
@@ -107,7 +108,7 @@ def setup_simulation(dir_path: str, particle_set: Particles) -> tuple:
     """
     Setup simulation directories and load particle set.
     Args:
-        dir_path (str):            Directory path for outputs
+        dir_path (str):  Directory path for outputs
         particle_set (Particles):  The particle set
     Returns:
         tuple: (directory_path, snapshot_path, particles)
@@ -119,7 +120,8 @@ def setup_simulation(dir_path: str, particle_set: Particles) -> tuple:
 def run_simulation(
     IC_file: str, 
     run_idx: int, 
-    tend, dtbridge, 
+    tend, 
+    dtbridge, 
     dt_diag, 
     code_dt: float,
     dE_track: bool, 
@@ -206,7 +208,7 @@ def run_simulation(
         dr = (particle_set[1].position - particle_set[0].position).lengths()
         Rvir = dr.max()
     else:
-        raise ValueError("Error: Are you sure you want to simulate with < two parents only?.")
+        raise ValueError(f"Only {len(major_bodies)} parents. Please define your own scale length.")
     conv_par = nbody_system.nbody_to_si(np.sum(major_bodies.mass), Rvir)
 
     # Setting up system
@@ -215,13 +217,13 @@ def run_simulation(
 
     parents = HierarchicalParticles(isolated_systems)
     nemesis = Nemesis(
-        par_conv=conv_par, 
         dtbridge=dtbridge, 
-        coll_dir=coll_dir, 
         code_dt=code_dt,
         dE_track=dE_track,
         star_evol=star_evol,
         gal_field=gal_field,
+        par_conv=conv_par, 
+        coll_dir=coll_dir, 
         verbose=verbose,
         nmerge=current_mergers,
         resume_time=time_offset
@@ -288,8 +290,7 @@ def run_simulation(
             t_diag += dt_diag
 
         if (dE_track) and (prev_step != nemesis.dt_step):
-            E1 = nemesis.calculate_total_energy()
-            E0 += nemesis.corr_energy
+            E1 = nemesis.calculate_total_energy() + nemesis.corr_energy
             energy_arr.append(abs((E1-E0)/E0))
 
             prev_step = nemesis.dt_step
@@ -310,7 +311,7 @@ def run_simulation(
 
     # Store simulation statistics
     print("...Simulation Ended...")
-    sim_time = (time.time() - START_TIME)/60.
+    sim_time = (time.time() - START_TIME) / 60.
     fname = os.path.join(directory_path, 'sim_stats', f'sim_stats_{run_idx}.txt')
     with open(fname, 'w') as f:
         f.write(f"Total CPU Time: {sim_time} minutes")
@@ -393,6 +394,7 @@ if __name__ == "__main__":
             f"Error: Run index {run_idx} out of range. \n"
             f"Available particle sets: {initial_particles}."
             )
+
     run_simulation(
         IC_file=IC_file, 
         run_idx=run_idx,

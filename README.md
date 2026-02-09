@@ -45,6 +45,7 @@ Runs can be **resumed automatically**, provided diagnostic parameters (`dtbridge
 - `src/grav_correctors.py`: Force correction routines to synchronise the micro- and macrostates (synchronise parent with children).
 - `src/hierarchical_particles.py`: Script to categorise particles into parents and children.
 - `src/nemesis.py`: Script hosting the evolution procedure.
+- `src/split_children.py`: Script to handle fragmentation of children system.
 - `tests/`: Folders with several test examples.
 
 ### Free parameters: 
@@ -118,4 +119,4 @@ and dense star clusters](https://www.aanda.org/articles/aa/full_html/2019/04/aa3
 
 ### NOTES:
 - To setup children at the initial time step, it is required that the particle set contains a `syst_id` attribute whose value is an integer. The set of particles with the same `syst_id` value will be flagged as a subsystem as long as `syst_id` > 0.
-- Since Nemesis relies heavily on frequent stop/start (hibernate/resume) cycles for its child integrators, sockets are used instead of MPI. The persistent stop/start cycles conflict with MPI worker behaviour since MPI workers cannot safely handle repeated suspend/resume signals, especially in large-N simulations where hundreds of worker processes are active. Repeated stop/start operations can lead to workers being incorrectly terminated, crashing the simulation altogether. Socket-based channels, however, can tolerate stop/start cyles because they do not use the tightly coupled, state-sensitive collective semantics of MPI. The problem, however, is that children code are restricted to one core per.
+- Since Nemesis relies heavily on hibernation/resumption cycles for its child integrators, sockets are used instead of MPI. The persistent stop/start cycles go against MPI philosophy of requiring processes to remain synchronised and active constantly. As such, interrupting or suspending workers mid-communication or a short windo of activity may lead to crashes. For systems with a large number of children, this is bound to happen. Instead, sockets work as independent processes, making them more stable to the stop/start cycles.

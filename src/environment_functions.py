@@ -18,9 +18,9 @@ def connected_components_kdtree(system: Particles, threshold) -> list:
         list: A list of connected component in form of AMUSE particles
     """
     coords = system.position.value_in(units.m)
-    dist_criteria = threshold.value_in(units.m)
+    criteria = threshold.value_in(units.m)
     clustering = DBSCAN(
-        eps=dist_criteria,
+        eps=criteria,
         min_samples=1,  # Isolate single particles as their own component
         metric='euclidean',
         algorithm="kd_tree",
@@ -31,17 +31,14 @@ def connected_components_kdtree(system: Particles, threshold) -> list:
     unique_labels = set(labels)
     return [system[labels == label] for label in unique_labels]
 
+
 def galactic_frame(parent_set: Particles, dx, dy, dz, dvx, dvy, dvz) -> Particles:
     """
     Shift particle set to galactic frame.
     Args:
-        parent_set (Particles):  The particle set
-        dx (units.length):       x-coordinate shift in the galactocentric frame
-        dy (units.length):       y-coordinate shift in the galactocentric frame
-        dz (units.length):       z-coordinate shift in the galactocentric frame
-        dvx (units.length):      x-velocity shift in the galactocentric frame
-        dvy (units.length):      y-velocity shift in the galactocentric frame
-        dvz (units.length):      z-velocity shift in the galactocentric frame
+        parent_set (Particles):      The particle set
+        dx/dy/dz (units.length):     x/y/z-psotiion shift in the galactocentric frame
+        dvx/dvy/dvz (units.length):  x/y/z-velocity shift in the galactocentric frame
     Returns:
         Particles: Particle set shifted to galactocentric coordinates
     """
@@ -56,6 +53,7 @@ def galactic_frame(parent_set: Particles, dx, dy, dz, dvx, dvy, dvz) -> Particle
 
     return parent_set
 
+
 def set_parent_radius(system_mass) -> units.au:
     """
     Merging radius of parent systems. Based on system crossing time.
@@ -68,6 +66,20 @@ def set_parent_radius(system_mass) -> units.au:
     """
     radius = PARENT_RADIUS_COEFF * (system_mass.value_in(units.MSun))**(1./3.)
     return radius
+
+
+def hill_radius(m1, m2, drij) -> units.au:
+    """
+    Compute the Hill radius between two bodies.
+    Args:
+        m1 (units.mass): Mass of the first body
+        m2 (units.mass): Mass of the second body
+        drij (units.length): Distance between the two bodies
+    Returns:
+        units.length: The Hill radius between the two bodies
+    """
+    return drij * (m1 / (3 * m2))**(1./3.)
+
 
 def planet_radius(planet_mass) -> units.REarth:
     """
@@ -84,6 +96,7 @@ def planet_radius(planet_mass) -> units.REarth:
     elif mass_in_earth < 125:
         return (0.55 | units.REarth)*(mass_in_earth)**0.65
     return (14.3 | units.REarth)*(mass_in_earth)**(-0.02) 
+
 
 def ZAMS_radius(star_mass) -> units.RSun:
     """
