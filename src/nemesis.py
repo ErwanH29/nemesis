@@ -5,16 +5,13 @@
 #    outweighs it. No use in putting in lower-level language given dictionary look ups.
 ####################################  OTHER ROOM FOR IMPROVEMENT  #################################################
 # 1. Flexible bridge times.
-# 2. Flexible parent radius. For instance, one can make the outer radius equal the boundary where gravitational influence of
-#    nearest neighbour is some fraction of the center-of-mass.
-# 3. Use old workers instead of spawning new ones on splitting.
-# 4. In _handle_collision(), the condition if remnant.key == children[nearest_mass].key 
+# 2. Flexible parent radius. For instance, one can make the outer radius equal the boundary where 
+#    gravitational influence of nearest neighbour is some fraction of the center-of-mass.
+# 3. In _handle_collision(), the condition if remnant.key == children[nearest_mass].key 
 #    could be removed entirely. But needs testing to ensure no bugs.
-# 5. Logic of split_subcodes. Main bottleneck is in spawning codes, but parallelising is made difficult due to
+# 4. Logic of split_subcodes. Main bottleneck is in spawning codes, but parallelising is made difficult due to
 #    needing PID management. Could be significantly improved if a technique identifying which thread has which PID.
-#        - Could also be worthwhile to check splits every XYZ timestep.
-# 6. When removing single particle children in _drift_child(), could be prone to error (Not encountered in tests).
-# 7. In _process_parent_mergers(), recycling old codes would be more efficient.
+# 5. In _process_parent_mergers(), recycling old codes would be more efficient.
 ####################################################################################################################
 ####################################################################################################################
 ####################################################################################################################
@@ -46,33 +43,43 @@ from amuse.ext.galactic_potentials import MWpotentialBovy2015
 from amuse.ext.orbital_elements import orbital_elements
 from amuse.units import units, constants, nbody_system
 
-from src.environment_functions import connected_components_kdtree, set_parent_radius
-from src.environment_functions import planet_radius, ZAMS_radius
-from src.globals import ASTEROID_RADIUS, CONNECTED_COEFF, EPS
-from src.globals import MIN_EVOL_MASS, PARENT_RADIUS_MAX, PARENT_NWORKER
+from src.environment_functions import (
+    planet_radius, set_parent_radius, ZAMS_radius
+)
+from src.globals import (
+    ASTEROID_RADIUS, EPS, MIN_EVOL_MASS, 
+    PARENT_RADIUS_MAX, PARENT_NWORKER
+)
 from src.grav_correctors import CorrectionKicks
 from src.hierarchical_particles import HierarchicalParticles
+from src.split_children import split_subcodes
 
 
 class Nemesis(object):
     def __init__(
-            self, par_conv, dtbridge, coll_dir, 
-            available_cpus=os.cpu_count(), nmerge=0,
-            resume_time=0. | units.yr, code_dt=0.03, 
-            dE_track=False, star_evol=False, 
-            gal_field=True, verbose=True
+            self, 
+            par_conv, 
+            dtbridge, 
+            coll_dir,
+            code_dt,
+            free_cpus=os.cpu_count(), 
+            nmerge=0,
+            resume_time=0. | units.yr,
+            dE_track=False, 
+            star_evol=False, 
+            gal_field=True, 
+            verbose=True,
             ):
         """
         Class setting up the simulation.
-
         Args:
             par_conv (converter):      Parent N-body converter
             dtbridge (units.time):     Diagnostic time step
             coll_dir (str):            Path to store collision data
-            available_cpus(int):       Number of available CPUs
+            code_dt (float):           Internal time step
+            free_cpus(int):            Number of available CPUs
             nmerge (int):              Number of mergers loaded particle set has
             resume_time (units.time):  Time which simulation is resumed at
-            code_dt (float):           Internal time step
             dE_track (bool):           Flag turning on/off energy error tracker
             star_evol (bool):          Flag turning on/off stellar evolution
             gal_field (bool):          Flag turning on/off galactic field
@@ -89,7 +96,7 @@ class Nemesis(object):
         self.__par_nworker = PARENT_NWORKER
         self.__resume_offset = resume_time
         self.__star_evol = star_evol
-        self.__total_free_cpus = available_cpus
+        self.__total_free_cpus = free_cpus
 
         # Protected attributes
         self._verbose = verbose
@@ -116,6 +123,7 @@ class Nemesis(object):
         self.particles = HierarchicalParticles(self.parent_code.particles)
         self.dt_step = 0
         self.dE_track = dE_track
+        self.corr_energy = 0. | units.J
 
         self._major_channel_maker()
         self._validate_initialization()
@@ -158,7 +166,7 @@ class Nemesis(object):
         lib.find_gravity_at_point.restype = None
         return lib
     
-    def cleanup_code(self, first_clean=1) -> None:
+    def cleanup_code(self, first_clean=True) -> None:
         """
         Cleanup all codes and processes
         Args:
@@ -309,21 +317,22 @@ class Nemesis(object):
 
     def _snapshot_worker_pids(self) -> set[int]:
         """Return the set of PIDs of all children workers"""
-        pids = set()
-        for child in self.__main_process.children(recursive=True):
+        pids: set[int] = set()
+        try:
+            children = self.__main_process.children(recursive=True)
+        except (psutil.NoSuchProcess, FileNotFoundError):
+            return pids
+
+        for child in children:
             try:
-                name = child.name()
-            except Exception:
-                self.cleanup_code()
-                error = f"Error extracting PID from child process: {child.name()} \n" \
-                         "Check if child worker name matches expected name in get_child_pids."
-                print(error)
-                print(f"Traceback: {traceback.format_exc()}")
-                sys.exit()
-            if "huayno_worker" in name \
-                or "ph4_worker" in name or \
-                    "symple_worker" in name:
-                pids.add(child.pid)
+                info = child.as_dict(attrs=["pid", "name"])
+            except (psutil.Error, FileNotFoundError):
+                continue
+
+            name = info.get("name") or ""
+            if any(tag in name for tag in ("huayno_worker", "ph4_worker", "symple_worker")):
+                pids.add(info["pid"])
+
         return pids
 
     def hibernate_workers(self, pid_list: list) -> None:
@@ -337,14 +346,16 @@ class Nemesis(object):
                 os.kill(pid, signal.SIGSTOP)
             except ProcessLookupError:
                 self.cleanup_code()
-                print(f"Warning: Process {pid} not found. It may have exited.")
-                print(f"Traceback: {traceback.format_exc()}")
-                sys.exit()
+                raise ProcessLookupError(
+                    f"Process {pid} not found. "
+                    f"It may have exited. {traceback.format_exc()}"
+                )
             except PermissionError:
                 self.cleanup_code()
-                print(f"Error: Insufficient permissions to stop process {pid}.")
-                print(f"Traceback: {traceback.format_exc()}")
-                sys.exit()
+                raise PermissionError(
+                    f"Insufficient permissions to stop process {pid}. "
+                    f"{traceback.format_exc()}"
+                )
 
     def resume_workers(self, pid_list: list) -> None:
         """
@@ -356,15 +367,17 @@ class Nemesis(object):
             try:
                 os.kill(pid, signal.SIGCONT)
             except ProcessLookupError:
-                print(f"Warning: Process {pid} not found. It may have exited.")
-                print(f"Traceback: {traceback.format_exc()}")
                 self.cleanup_code()
-                sys.exit()
+                raise ProcessLookupError(
+                    f"Process {pid} not found. It may have exited."
+                    f"Traceback: {traceback.format_exc()}"
+                    )
             except PermissionError:
-                print(f"Error: Insufficient permissions to stop process {pid}.")
-                print(f"Traceback: {traceback.format_exc()}")
                 self.cleanup_code()
-                sys.exit()
+                raise PermissionError(
+                    f"Insufficient permissions to stop process {pid}."
+                    f"Traceback: {traceback.format_exc()}"
+                )
 
     def _major_channel_maker(self) -> None:
         """Create channels for communication between codes"""
@@ -413,7 +426,6 @@ class Nemesis(object):
             ) -> None:
         """
         Create communication channel between codes and specified children system
-
         Args:
             parent_key (int):            Parent particle key
             code_particles (Particles):  Children particle set in grav. code
@@ -522,7 +534,6 @@ class Nemesis(object):
         self.evolve_time = self.model_time
         kick_corr = timestep
         while self.model_time < (self.evolve_time + timestep) * (1. - EPS):
-            self.corr_energy = 0. | units.J
             self.dt_step += 1
 
             if (self.evolve_time + self.__resume_offset) == 0. | units.yr:
@@ -551,8 +562,9 @@ class Nemesis(object):
                 self._star_channel_copier()
 
             self._sync_local_to_grav()
-            self.split_subcodes()
+            split_subcodes(self)
             self._sync_local_to_grav(child_sync=False)
+            self._check_single_system()
 
         if self._verbose:
             print(f"Time: {self.model_time.in_(units.Myr)}")
@@ -574,104 +586,14 @@ class Nemesis(object):
             print(f"#Children: {Nkids}")
             print("===" * 50)
 
-    def split_subcodes(self) -> None:
-        """Check for any isolated children"""
-        if self._verbose:
-            print("...Checking Splits...")
-
-        new_isolated = Particles()
-        for parent_key, (parent, subsys) in list(self.children.items()):
-            par_rad = parent.radius
-            components = connected_components_kdtree(
-                system=subsys,
-                threshold=CONNECTED_COEFF * par_rad
-                )
-            if len(components) <= 1:
-                continue
-
-            if self._verbose:
-                print("...Split Detected...")
-
-            rework_code = False
-            par_vel = parent.velocity
-            par_pos = parent.position
-
-            pid = self._pid_workers.pop(parent_key)
-            self.resume_workers(pid)
-            self.particles.remove_particle(parent)
-
-            code = self.subcodes.pop(parent_key)
-            offset = self._time_offsets.pop(code)
-            self._child_channels.pop(parent_key)
-            cpu_time = self._cpu_time.pop(parent_key)
-            for c in components:
-                sys = c.as_set()
-                sys.position += par_pos
-                sys.velocity += par_vel
-
-                has_massive = (len(sys) > 1) and np.any(sys.mass.value_in(units.kg) > 0.0)
-                if has_massive:
-                    newparent = self.particles.add_children(sys)
-                    newparent_key = newparent.key
-                    scale_mass = newparent.mass
-                    scale_radius = set_parent_radius(scale_mass)
-                    newparent.radius = scale_radius
-                    if not rework_code:  # Recycle old code
-                        if self._verbose:
-                            print("Recycling old code")
-                        rework_code = True
-                        newcode = code
-                        newcode.particles.remove_particles(code.particles)
-                        newcode.particles.add_particles(sys)
-                        self._time_offsets[newcode] = offset
-                        worker_pid = pid
-
-                    else:
-                        if self._verbose:
-                            print("Making new code")
-                        newcode, worker_pid = self._sub_worker(
-                            children=sys,
-                            scale_mass=scale_mass,
-                            scale_radius=scale_radius
-                            )
-                        self._set_worker_affinity(worker_pid)
-                        self._time_offsets[newcode] = self.model_time
-
-                    self._cpu_time[newparent_key] = cpu_time
-                    self.subcodes[newparent_key] = newcode
-
-                    self._child_channel_maker(
-                        parent_key=newparent_key,
-                        code_particles=newcode.particles,
-                        children=sys
-                    )
-                    self._child_channels[newparent_key]["from_children_to_gravity"].copy()  # More precise
-
-                    self._pid_workers[newparent_key] = worker_pid
-                    self.hibernate_workers(worker_pid)
-                else:
-                    new_isolated.add_particles(sys)
-
-            if not rework_code:  # Only triggered if pure ionisation
-                code.cleanup_code()
-                code.stop()
-
-        if len(new_isolated) > 0:
-            if self._verbose:
-                print(f"Adding {len(new_isolated)} isolated")
-            new_isolated.radius = set_parent_radius(new_isolated.mass)
-            mask = new_isolated.radius > PARENT_RADIUS_MAX
-            new_isolated[mask].radius = PARENT_RADIUS_MAX
-            self.particles.add_particles(new_isolated)
-
     def _check_single_system(self) -> None:
         """Check for any single particle children systems."""
-        for parent_key, (parent, subsys) in self.children.items():
-            if len(subsys) == 1:
+        for parent_key, (parent, child) in self.children.items():
+            if len(child) == 1:
                 if self._verbose:
-                    print(f"Single particle system detected for parent {parent_key}. Removing subsystem...")
+                    print(f"Single particle system detected for parent {parent_key}. Removing children...")
                 
-                particle = subsys[0]
+                particle = child[0]
                 particle.position += parent.position
                 particle.velocity += parent.velocity
                 
@@ -684,7 +606,7 @@ class Nemesis(object):
                 self._child_channels.pop(parent_key)
                 code.cleanup_code()
                 code.stop()
-
+    
     def _process_parent_mergers(self, corr_time) -> None:
         """
         Process parent mergers by merging children systems into new parents.
@@ -797,26 +719,27 @@ class Nemesis(object):
             par_key = particle.key
             new_par.add_particle(particle)
 
-            if par_key in self.children:  # Not merged yet and hosts children
+            if par_key in self.children:
                 if self._verbose:
                     print(f"First time Parent {par_key} merging. Has children...")
 
-                ## Remove all references, keep system dynamically younger
+                ### Remove all references, keep system dynamically younger. Essential for ZKL
+                ### Store old parent attributes as well for reverse kicks.
                 _, children = self.children.pop(par_key)
 
                 ## Store old attributes for reverse kicks
-                old_parent = self.old_copy[self.old_keys == par_key]
+                old_parent = self.old_copy_map[par_key]
                 coll_parents_temp.add_particle(old_parent) 
-                coll_children_temp[par_key] = (old_parent[0], children)  # Index to make object
+                coll_children_temp[par_key] = (old_parent, children)  # Index to make object
 
-            elif par_key in self.old_keys: # Not merged yet and has no children
+            elif par_key in self.old_keys:
                 if self._verbose:
                     print(f"First time Parent {par_key} merges. Is isolated...")
 
                 p = particle.as_particle_in_set(self.particles)
                 temp_set.add_particle(p)  # Updated set
 
-                particle = self.old_copy[self.old_keys == par_key]
+                particle = self.old_copy_map[par_key]
                 if particle.mass == (0. | units.kg):
                     if self._verbose:
                         print(f"Merging particle is an asteroid")
@@ -828,7 +751,7 @@ class Nemesis(object):
                     particle.radius = ZAMS_radius(particle.mass)
                 coll_parents_temp.add_particle(particle)
                 
-            elif par_key in self._coll_parents:  # Already merged
+            elif par_key in self._coll_parents:
                 if self._verbose:
                     print(f"Parent {par_key} merged before...")
 
@@ -840,6 +763,7 @@ class Nemesis(object):
                 old_particle = self._coll_parents.pop(par_key)
                 coll_parents_temp.add_particle(old_particle)
 
+                ## Re-map references of previous merger
                 prev_coll_children = self._coll_children.pop(par_key)
                 for prev_key, (old_parent, children) in prev_coll_children.items():
                     if prev_key not in coll_children_temp:
@@ -922,6 +846,8 @@ class Nemesis(object):
         most_massive = collider[collider.mass.argmax()]
         collider_mass = collider.mass
         if min(collider_mass) == (0. | units.kg):
+            if max(collider_mass) == (0. | units.kg):
+                raise ValueError("Collision between two zero-mass particles. Something went wrong...")
             remnant = Particles(particles=[most_massive])
 
         elif max(collider_mass) > (0 | units.kg):
@@ -943,29 +869,25 @@ class Nemesis(object):
                     if coll_b.mass > MIN_EVOL_MASS:
                         self.stellar_code.particles.remove_particle(coll_b)
                         self.stars.remove_particle(coll_b)
-
             else:
                 remnant.radius = planet_radius(remnant.mass)
 
-        else:
-            raise ValueError("Error: Asteroid - Asteroid collision")
+        if self._verbose:
+            print(f"{coll_a.type}, {coll_b.type}")
+            print(f"{coll_a.mass.in_(units.MSun)} + {coll_b.mass.in_(units.MSun)} --> {remnant.mass.in_(units.MSun)}")
 
-        print(f"{coll_a.type}, {coll_b.type}")
-        print(f"{coll_a.mass.in_(units.MSun)} + {coll_b.mass.in_(units.MSun)} --> {remnant.mass.in_(units.MSun)}")
-        print(f"{coll_a.radius.in_(units.RSun)} + {coll_b.radius.in_(units.RSun)} --> {remnant.radius.in_(units.RSun)}")
         remnant.coll_events = max(collider.coll_events) + 1
         remnant.type = most_massive.type
         remnant.original_key = most_massive.original_key
 
-        # Deal with simultaneous mergers
+        ### Deal with simultaneous collision events being detected in code.
         changes = [ ]
         coll_a_change = 0
         coll_b_change = 0
         if not resolved_keys:
             resolved_keys[coll_a.key] = remnant.key[0]
             resolved_keys[coll_b.key] = remnant.key[0]
-        else:
-            # If the current collider is a remnant of past event, remap
+        else: # If the current collider is a remnant of past event, remap
             for prev_collider, resulting_remnant in resolved_keys.items():
                 if coll_a.key == resulting_remnant:
                     changes.append((prev_collider, remnant.key[0]))
@@ -998,8 +920,8 @@ class Nemesis(object):
                 # Re-mapping dictionary to new parent
                 old_code = self.subcodes.pop(parent_key)
                 old_offset = self._time_offsets.pop(old_code)
-                old_channel = self._child_channels.pop(parent_key)
                 old_cpu_time = self._cpu_time.pop(parent_key)
+                self._child_channels.pop(parent_key)
 
                 self.subcodes[newparent_key] = old_code
                 new_code = self.subcodes[newparent_key]
@@ -1014,7 +936,6 @@ class Nemesis(object):
                 self._pid_workers[newparent_key] = child_pid
                 self.particles.remove_particle(parent)
 
-                del old_channel  # Check if this breaks
             else:
                 newparent = parent
         else:
@@ -1035,7 +956,7 @@ class Nemesis(object):
         """
         if self.dE_track:
             E0 = self.calculate_total_energy()
-            
+
         SN_particle = SN_detect.particles(0)
         for ci in range(len(SN_particle)):
             if self._verbose:
@@ -1045,12 +966,12 @@ class Nemesis(object):
             natal_kick_x = SN_parti.natal_kick_x
             natal_kick_y = SN_parti.natal_kick_y
             natal_kick_z = SN_parti.natal_kick_z
-            
+
             SN_parti = SN_parti.get_intersecting_subset_in(bodies)
             SN_parti.vx += natal_kick_x
             SN_parti.vy += natal_kick_y
             SN_parti.vz += natal_kick_z
-            
+
         if self.dE_track:
             E1 = self.calculate_total_energy()
             self.corr_energy += E1 - E0
@@ -1095,7 +1016,9 @@ class Nemesis(object):
             print(f"Evolving {len(self.particles)} until: {dt.in_(units.Myr)}")
 
         self.old_copy = self.particles.copy()
+        self.old_copy_map = {p.key: p for p in self.old_copy}
         self.old_keys = self.old_copy.key
+
         coll_time = None
         while self._evolve_code.model_time < dt * (1. - EPS):
             self._evolve_code.evolve_model(dt)
@@ -1111,10 +1034,8 @@ class Nemesis(object):
                     for cs in coll_sets:
                         self._parent_merger(cs)
                 except Exception as e:
-                    print(f"Error while merging {coll_sets}: {e}")
-                    print("Traceback:", traceback.format_exc())
                     self.cleanup_code()
-                    sys.exit()
+                    raise Exception(f"Error during parent merger. {traceback.format_exc()}")
 
         if (self.__gal_field):
             while self.parent_code.model_time < dt * (1. - EPS):
@@ -1131,10 +1052,8 @@ class Nemesis(object):
                         for cs in coll_sets:
                             self._parent_merger(cs)
                     except Exception as e:
-                        print(f"Error while merging {coll_sets}: {e}")
-                        print("Traceback:", traceback.format_exc())
                         self.cleanup_code()
-                        sys.exit()
+                        raise Exception(f"Error during parent merger. {traceback.format_exc()}")
 
         if coll_time:
             self._process_parent_mergers(corr_time)
@@ -1203,19 +1122,17 @@ class Nemesis(object):
             parent = self.children[parent_key][0]
             children = self.children[parent_key][1]
 
-            stopping_condition = code.stopping_conditions.collision_detection
-            stopping_condition.enable()
+            sc = code.stopping_conditions.collision_detection
+            sc.enable()
             evol_time = dt - self._time_offsets[code]
 
             t0 = time.time()
             while code.model_time < evol_time * (1. - EPS):
                 code.evolve_model(evol_time)
-                if stopping_condition.is_set():
+                if sc.is_set():
                     with self.__lock:
                         parent = resolve_collisions(
-                            code, parent,
-                            children,
-                            stopping_condition
+                            code, parent, children, sc
                             )
 
             t1 = time.time()
@@ -1235,7 +1152,7 @@ class Nemesis(object):
                 executor.submit(evolve_code, parent_key): parent_key 
                 for parent_key in sorted_cpu_time
             }
-            for ifut, future in enumerate(as_completed(futures)):  # Iterate over to ensure no silent failures
+            for ifut, future in enumerate(as_completed(futures)):
                 parent_key = futures[future]
                 try:
                     future.result()
@@ -1243,7 +1160,7 @@ class Nemesis(object):
                     if ifut == 0:
                         self.cleanup_code()
                     else:
-                        self.cleanup_code(first_clean=0)
+                        self.cleanup_code(first_clean=False)
                     print(f"Error while evolving parent {parent_key}: {e}")
                     print(f"Traceback: {traceback.format_exc()}")
                     sys.exit()
