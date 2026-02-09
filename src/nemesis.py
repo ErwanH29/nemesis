@@ -276,15 +276,15 @@ class Nemesis(object):
         
         converter = nbody_system.nbody_to_si(scale_mass, scale_radius)
         PIDs_before = self._snapshot_worker_pids()
-        code = Ph4(#Huayno(
+        code = Huayno(
             converter, 
             number_of_workers=number_of_workers, 
             channel_type="sockets"
             )
         code.particles.add_particles(children)
-        code.parameters.epsilon_squared = (1. | units.au)**2.
+        code.parameters.epsilon_squared = (0. | units.au)**2.
         code.parameters.timestep_parameter = self.__code_dt
-        #code.set_integrator("SHARED10_COLLISIONS")
+        code.set_integrator("SHARED10_COLLISIONS")
 
         PIDs_after = self._snapshot_worker_pids()
         worker_PID = list(PIDs_after - PIDs_before)
@@ -663,6 +663,27 @@ class Nemesis(object):
             mask = new_isolated.radius > PARENT_RADIUS_MAX
             new_isolated[mask].radius = PARENT_RADIUS_MAX
             self.particles.add_particles(new_isolated)
+
+    def _check_single_system(self) -> None:
+        """Check for any single particle children systems."""
+        for parent_key, (parent, subsys) in self.children.items():
+            if len(subsys) == 1:
+                if self._verbose:
+                    print(f"Single particle system detected for parent {parent_key}. Removing subsystem...")
+                
+                particle = subsys[0]
+                particle.position += parent.position
+                particle.velocity += parent.velocity
+                
+                pid = self._pid_workers.pop(parent_key)
+                self.resume_workers(pid)
+                self.particles.add_particle(particle)
+                code = self.subcodes.pop(parent_key)
+                self._time_offsets.pop(code)
+                self._cpu_time.pop(parent_key)
+                self._child_channels.pop(parent_key)
+                code.cleanup_code()
+                code.stop()
 
     def _process_parent_mergers(self, corr_time) -> None:
         """
@@ -1191,22 +1212,12 @@ class Nemesis(object):
                 code.evolve_model(evol_time)
                 if stopping_condition.is_set():
                     with self.__lock:
-                        if self.dE_track:
-                            KE = code.particles.kinetic_energy()
-                            PE = code.particles.potential_energy()
-                            E0 = KE + PE
-
                         parent = resolve_collisions(
                             code, parent,
                             children,
                             stopping_condition
                             )
 
-                        if self.dE_track:
-                            KE = code.particles.kinetic_energy()
-                            PE = code.particles.potential_energy()
-                            E1 = KE + PE
-                            self.corr_energy += E1 - E0
             t1 = time.time()
             self._cpu_time[parent.key] = t1 - t0
             self.hibernate_workers(self._pid_workers[parent.key])
@@ -1236,24 +1247,6 @@ class Nemesis(object):
                     print(f"Error while evolving parent {parent_key}: {e}")
                     print(f"Traceback: {traceback.format_exc()}")
                     sys.exit()
-
-        for parent_key in list(self.subcodes.keys()):  # Remove single children systems:
-            pid = self._pid_workers[parent_key]
-            self.resume_workers(pid)
-            if len(self.subcodes[parent_key].particles) == 1:
-                old_subcode = self.subcodes.pop(parent_key)
-                self._time_offsets.pop(old_subcode)
-                self._child_channels.pop(parent_key)
-                self._pid_workers.pop(parent_key)
-                self._cpu_time.pop(parent_key)
-
-                old_subcode.cleanup_code()
-                old_subcode.stop()
-
-                del old_subcode
-
-            else:
-                self.hibernate_workers(pid)
 
     @property
     def model_time(self) -> float:  
