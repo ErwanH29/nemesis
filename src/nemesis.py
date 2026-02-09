@@ -317,7 +317,7 @@ class Nemesis(object):
 
     def _snapshot_worker_pids(self) -> set[int]:
         """Return the set of PIDs of all children workers"""
-        pids: set[int] = set()
+        pids = set()
         try:
             children = self.__main_process.children(recursive=True)
         except (psutil.NoSuchProcess, FileNotFoundError):

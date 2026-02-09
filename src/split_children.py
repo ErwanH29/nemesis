@@ -39,8 +39,6 @@ def split_subcodes(self) -> None:
         offset = self._time_offsets.pop(code)
         self._child_channels.pop(parent_key)
         cpu_time = self._cpu_time.pop(parent_key)
-        
-        asteroids = Particles()
         for c in components:
             sys = c.as_set()
             sys.position += par_pos

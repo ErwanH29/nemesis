@@ -38,7 +38,7 @@ class HierarchicalParticles(ParticlesOverlay):
 
         return _parts
 
-    def assign_children(self, parent: Particle, child: Particles) -> None:
+    def assign_children(self, parent: Particle, child: Particles) -> Particle:
         """
         Assign children to parent particle. No reshifting needed
         Args:
