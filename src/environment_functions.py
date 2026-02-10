@@ -12,8 +12,8 @@ def connected_components_kdtree(system: Particles, threshold) -> list:
     Returns a list of connected component subsets of particles.
     Uses a KD-Tree for efficient spatial queries.
     Args:
-        system (Particles):       The particle set
-        threshold (units.length): The distance threshold for connected components
+        system (Particles):        The particle set
+        threshold (units.length):  The distance threshold for connected components
     Returns:
         list: A list of connected component in form of AMUSE particles
     """
@@ -37,7 +37,7 @@ def galactic_frame(parent_set: Particles, dx, dy, dz, dvx, dvy, dvz) -> Particle
     Shift particle set to galactic frame.
     Args:
         parent_set (Particles):      The particle set
-        dx/dy/dz (units.length):     x/y/z-psotiion shift in the galactocentric frame
+        dx/dy/dz (units.length):     x/y/z-position shift in the galactocentric frame
         dvx/dvy/dvz (units.length):  x/y/z-velocity shift in the galactocentric frame
     Returns:
         Particles: Particle set shifted to galactocentric coordinates

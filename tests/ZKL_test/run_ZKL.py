@@ -13,5 +13,6 @@ run_simulation(
     gal_field=0, 
     dE_track=1, 
     star_evol=0, 
-    verbose=1
+    verbose=1,
+    test_particle=False
 )

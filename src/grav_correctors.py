@@ -6,10 +6,8 @@
  
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
-import sys
 
-from amuse.couple.bridge import CalculateFieldForParticles
-from amuse.lab import constants, units, Particles
+from amuse.lab import units, Particles
 
 from src.globals import ACC_UNITS, SI_UNITS
 
@@ -42,8 +40,6 @@ def compute_gravity(
         pert_m (units.mass):  Mass of perturber particles
         pert_x/y/z (units.length):  x/y/z coordinate of perturber particles
         infl_x/y/z (units.length):  x/y/z coordinate of influenced particles
-        npert (int):  Number of perturber particles
-        npart (int):  Number of influenced particles
     Returns:
         tuple:  Acceleration array of particles (ax, ay, az)
     """
@@ -79,7 +75,7 @@ def correct_parents_threaded(
         parent_mass, parent_x, parent_y, parent_z,
         child_mass, child_x, child_y, child_z,
         removed_idx
-        ):
+        ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Correct the gravitational influence of a parent particle on its child system.
     Args:
@@ -225,34 +221,6 @@ class CorrectionFromCompoundParticle(object):
             Array:  The potential field at the location
         """
         raise NotImplementedError("Potential correction is not yet implemented.")
-        particles = self.particles.copy()
-        particles.phi = 0. | (particles.vx.unit**2)
-        for parent, sys in self.children.values(): 
-            copied_system = sys.copy()
-            copied_system.position += parent.position
-            copied_system.velocity += parent.velocity
-
-            code = CalculateFieldForParticles(gravity_constant=constants.G)
-            code.particles.add_particles(copied_system)
-
-            parts = particles - parent
-            phi = code.get_potential_at_point(0.*parts.radius, 
-                                              parts.x, 
-                                              parts.y, 
-                                              parts.z)
-            parts.phi += phi
-            code.cleanup_code()
-
-            code = CalculateFieldForParticles(gravity_constant=constants.G)
-            code.particles.add_particle(parent)
-            phi = code.get_potential_at_point(0.*parts.radius, 
-                                              parts.x, 
-                                              parts.y, 
-                                              parts.z)
-            parts.phi -= phi
-            code.cleanup_code()
-
-        return particles.phi
 
 
 class CorrectionForCompoundParticle(object):  
@@ -339,28 +307,15 @@ class CorrectionForCompoundParticle(object):
             Array:  The potential field at the system particle's location
         """
         raise NotImplementedError("Potential correction is not yet implemented.")
-        instance = CalculateFieldForParticles(gravity_constant=constants.G)
-        instance.particles.add_particles(self.system)
-        phi = instance.get_potential_at_point(0.*radius,
-                                              self.parent.x + x,
-                                              self.parent.y + y,
-                                              self.parent.z + z)
-        _phi = instance.get_potential_at_point([0.*self.parent.radius],
-                                               [self.parent.x],
-                                               [self.parent.y],
-                                               [self.parent.z])
-        instance.cleanup_code()
 
-        return (phi-_phi[0])
-    
-    
+
 class CorrectionKicks(object):
     def __init__(self, grav_lib, avail_cpus: int):
         """
         Apply correction kicks onto particles.
         Args:
-            grav_lib (Library):  The gravity library (e.g., a wrapped C++ library).
-            avail_cpus (int):    Number of available CPU cores
+            grav_lib (Library):  The wrapped C++ gravity library.
+            avail_cpus (int):    Number of available CPU cores.
         """
         self.lib = grav_lib
         self.avail_cpus = avail_cpus
@@ -491,8 +446,8 @@ class CorrectionKicks(object):
             futures = []
             with ThreadPoolExecutor(max_workers=self.avail_cpus) as executor:
                 try:
-                    for parent, child in children.values():
-                        future = process_children_jobs(parent, child)
+                    for parent, children in children.values():
+                        future = process_children_jobs(parent, children)
                         futures.append(future)
                     for future in as_completed(futures):
                         future.result()

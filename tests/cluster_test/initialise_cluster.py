@@ -11,7 +11,7 @@ from amuse.units import units
 
 
 
-def get_disk_radius(host_mass):
+def get_disk_radius(host_mass) -> tuple:
     """
     Calculate disk radius based on host star mass.
     Inner radius defined as when Porb = 1 year.
@@ -27,7 +27,7 @@ def get_disk_radius(host_mass):
     return Rinner, Router
 
 
-def new_rotation_matrix_from_euler_angles(phi, theta, chi):
+def new_rotation_matrix_from_euler_angles(phi, theta, chi) -> np.ndarray:
     """Rotation matrix for planetary system orientation"""
     cosp = np.cos(phi)
     sinp = np.sin(phi)
@@ -42,7 +42,7 @@ def new_rotation_matrix_from_euler_angles(phi, theta, chi):
     ])
 
 
-def rotate(position, velocity, phi, theta, psi):
+def rotate(position, velocity, phi, theta, psi) -> tuple:
     """Rotate planetary system"""
     Runit = position.unit
     Vunit = velocity.unit
@@ -54,7 +54,7 @@ def rotate(position, velocity, phi, theta, psi):
     )
 
 
-def setup_cluster(Nstars, Rvir, Qvir, nchild):
+def setup_cluster(Nstars, Rvir, Qvir, nchild) -> None:
     """
     Create cluster particle set
     Args:
@@ -83,7 +83,7 @@ def setup_cluster(Nstars, Rvir, Qvir, nchild):
     bodies.syst_id = -1
     bodies.type = "STAR"
     mask = (masses > 0.5 | units.MSun) & (masses < 2 | units.MSun)
-    host_stars = bodies[mask].random_sample(nchild)
+    host_stars = bodies[mask].random_sample(int(nchild))
     
     particle_set = Particles()
     for syst_id, host in enumerate(host_stars):
@@ -103,8 +103,8 @@ def setup_cluster(Nstars, Rvir, Qvir, nchild):
             disk_mass=0.01*host.mass
         )
         planets = host_star.planets[0]
-        Nplanets = min(len(planets), np.random.uniform(1, 6))
-        planets = planets.random_sample(Nplanets)
+        Nplanets = min(len(planets), np.random.randint(1, 6))
+        planets = planets.random_sample(int(Nplanets))
         planets.type = "PLANET"
         planets.syst_id = host.syst_id
 
@@ -119,8 +119,8 @@ def setup_cluster(Nstars, Rvir, Qvir, nchild):
         asteroids = ProtoPlanetaryDisk(
             NUM_ASTEROID, 
             densitypower=1.5, 
-            Rmin=10*min_disk_size.value_in(units.au), 
-            Rmax=max_disk_size.value_in(units.au), 
+            radius_min=10*min_disk_size.value_in(units.au), 
+            radius_max=max_disk_size.value_in(units.au), 
             q_out=1, discfraction=0.01,
             convert_nbody=local_converter
         ).result
@@ -183,5 +183,5 @@ setup_cluster(
     Nstars=Nstars,
     Rvir=Rvir, 
     Qvir=0.5,
-    nchild=10
+    nchild=30
 )

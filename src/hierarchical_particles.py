@@ -1,6 +1,6 @@
 
 ############################## NOTES ##############################
-# Recentering children is optimised. Even without GIL release, 
+# Recentering subsystems is optimised. Even without GIL release, 
 # overhead of multiprocessing is too consuming. Most likely the 
 # AMUSE-based arrays (position/velocity) are already wrapped around 
 # NumPy arrays.
@@ -59,9 +59,9 @@ class HierarchicalParticles(ParticlesOverlay):
     
     def add_children(self, child: Particles, recenter=True) -> Particle:
         """
-        Create a parent particle from children.
+        Create a parent from children.
         Args:
-            child (Particles):  The child system particle set.
+            child (Particles):  The child particle set.
             recenter (bool):    Flag to recenter the parent.
         Returns:
             Particle:  The parent particle.
@@ -119,7 +119,7 @@ class HierarchicalParticles(ParticlesOverlay):
 
     def recenter_children(self, max_workers: int) -> None:
         """
-        Recenter children.
+        Recenter child systems.
         Args:
             max_workers (int):  Number of cores to use.
         """
@@ -186,8 +186,8 @@ class HierarchicalParticles(ParticlesOverlay):
         parts = self.copy()
         parts.syst_id = -1
 
-        children = self.collection_attributes.subsystems
-        for system_id, (parent, child) in enumerate(children.values()):
+        children_systems = self.collection_attributes.subsystems
+        for system_id, (parent, child) in enumerate(children_systems.values()):
             parts.remove_particle(parent)
 
             child_set = parts.add_particles(child)

@@ -24,7 +24,8 @@ if RUN_NEMESIS:
         gal_field=0, 
         dE_track=1, 
         star_evol=0, 
-        verbose=1
+        verbose=1,
+        test_particle=True
     )
 else:
     from amuse.community.ph4.interface import Ph4
@@ -49,7 +50,7 @@ else:
         major_bodies.mass.sum(), 
         major_bodies.virial_radius()
         )
-    code = Ph4(converter, number_of_workers=4)
+    code = Ph4(converter, number_of_workers=3)
     code.particles.add_particles(particle_set)
     code.parameters.epsilon_squared = (1 | units.au)**2.
     code.parameters.timestep_parameter = code_dt
