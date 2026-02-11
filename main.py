@@ -1,12 +1,16 @@
-##################################### NOTES ###############################
-# 1. Implement cleaner way to initialise children.
-# 2. Upon resumption, code assumes single star population.  Stellar ages 
-#    correspond to the time of the simulation at last stop. 
-#    To account for multi-stellar population, may require several stellar 
-#    workers. For any help, please contact:
-#       - Erwan Hochart (hochart@strw.leidenuniv.nl)
-#       - Simon Portegies Zwart (spz@strw.leidenuniv.nl)
-###########################################################################
+"""
+This is the main script to run Nemesis simulations.
+Possible Room for Improvements:
+    1. Implement cleaner way to initialise children.
+    2. Upon resumption, code assumes single star population. That is,
+       stellar ages correspond to the time of the simulation at last stop.
+       To account for multi-stellar population, may require several stellar
+       workers. For any help, please contact:
+
+For any help, please contact:
+    - Erwan Hochart...........(hochart@strw.leidenuniv.nl)
+    - Simon Portegies Zwart...(spz@strw.leidenuniv.nl)
+"""
 
 
 import glob
@@ -56,9 +60,9 @@ def load_particle_set(ic_file: str) -> Particles:
     particle_set.move_to_center()
     particle_set.original_key = particle_set.key
 
-    # Ensure no orphaned syst_id > 0 (i.e., positive system IDs with only 1 particle)
     syst_ids = particle_set.syst_id
 
+    # Ensure no orphaned syst_id > 0 (i.e., positive system IDs with only 1 particle)
     ids, counts = np.unique(syst_ids[syst_ids > 0], return_counts=True)
     orphan_ids = ids[counts == 1]
     if orphan_ids.size:
@@ -122,10 +126,11 @@ def setup_simulation(dir_path: str, particle_set: Particles) -> tuple:
 def run_simulation(
     IC_file: str, 
     run_idx: int, 
-    tend, 
-    dtbridge, 
-    dt_diag, 
+    tend: units.yr, 
+    dtbridge: units.yr, 
+    dt_diag: units.yr, 
     test_particle: bool,
+    n_worker_parent: int,
     code_dt: float,
     dE_track: bool, 
     gal_field: bool, 
@@ -141,6 +146,7 @@ def run_simulation(
         dtbridge (units.time):  Bridge timestep
         dt_diag (units.time):   Diagnostic time step
         test_particle (bool):   Flag to run test particle simulation
+        n_worker_parent (int):  Number of workers for parent code
         code_dt (float):        Gravitational integrator internal timestep
         dE_track (boolean):     Flag turning on energy error tracker
         gal_field (boolean):    Flag turning on galactic field or not
@@ -155,8 +161,10 @@ def run_simulation(
             directory_path = os.path.join(sim_dir, f"ZKL_Rpar{rpar_in_au}au")
         else:
             directory_path = os.path.join(sim_dir, f"cluster_run_nemesis")
+
     else:
         directory_path = os.path.join(sim_dir, f"Nrun{run_idx}")
+
     init_params = os.path.join(directory_path, 'sim_stats', f'initial_conditions_{run_idx}.txt')
     coll_dir = os.path.join(directory_path, "collision_snapshot")
     
@@ -213,9 +221,9 @@ def run_simulation(
         Rvir = dr.max()
     else:
         raise ValueError(f"Error: Are you sure you want to simulate with {len(major_bodies)} parents only?.")
-    conv_par = nbody_system.nbody_to_si(np.sum(major_bodies.mass), Rvir)
 
     # Setting up system
+    conv_par = nbody_system.nbody_to_si(np.sum(major_bodies.mass), Rvir)
     isolated_systems = major_bodies[major_bodies.syst_id <= 0]
     bounded_systems = major_bodies[major_bodies.syst_id > 0]
 
@@ -227,13 +235,13 @@ def run_simulation(
         dE_track=dE_track,
         star_evol=star_evol,
         gal_field=gal_field,
+        n_worker_parent=n_worker_parent,
         par_conv=conv_par, 
         coll_dir=coll_dir, 
         verbose=verbose,
         nmerge=current_mergers,
         resume_time=time_offset
-    )
-
+        )
     for id_ in np.unique(bounded_systems.syst_id):
         print(f"\rAdding subsystem with syst_id = {id_}", end="", flush=True)
         subsystem = particle_set[particle_set.syst_id == id_]
@@ -411,6 +419,7 @@ if __name__ == "__main__":
         tend=o.tend, 
         dtbridge=o.tbridge,
         test_particle=o.test_idx,
+        n_worker_parent=o.par_nworker,
         code_dt=o.code_dt,
         dt_diag=o.dt_diag,
         gal_field=o.gal_field, 

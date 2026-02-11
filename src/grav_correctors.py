@@ -1,9 +1,11 @@
-############################## TO WORK ON ##############################
-# 1. AMUSIFY C++ LIBRARY WITH INTERFACE  --> ASK ORIGINAL AUTHOR FOR SKELETON
-# 2. RELEASE GIL IN C++ LIBRARY
-# 3. GET_POTENTIAL_AT_POINT FUNCTION NOT USED --> TO VALIDATE
-########################################################################
- 
+"""
+STILL IN DEVELOPMENT. 
+1. AMUSIFY C++ LIBRARY WITH INTERFACE  --> ASK ORIGINAL AUTHOR FOR SKELETON
+2. RELEASE GIL IN C++ LIBRARY
+3. GET_POTENTIAL_AT_POINT FUNCTION NOT USED --> TO VALIDATE
+"""
+
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 
@@ -15,7 +17,8 @@ from src.globals import ACC_UNITS, SI_UNITS
 
 def _as_float64_si(q, target_unit) -> np.ndarray:
     """
-    Convert an AMUSE Quantity (scalar or vector) to a float64 numpy array in target_unit.
+    Convert an AMUSE Quantity (scalar or vector) to a 
+    float64 numpy array in target_unit.
     """
     arr = np.asarray(q.value_in(target_unit), dtype=np.float64)
     if arr.ndim == 0:
@@ -36,8 +39,8 @@ def compute_gravity(
     """
     Compute gravitational force felt by perturber particles due to externals
     Args:
-        grav_lib (library):   Library to compute gravity
-        pert_m (units.mass):  Mass of perturber particles
+        grav_lib (library):         Library to compute gravity
+        pert_m (units.mass):        Mass of perturber particles
         pert_x/y/z (units.length):  x/y/z coordinate of perturber particles
         infl_x/y/z (units.length):  x/y/z coordinate of influenced particles
     Returns:
@@ -71,30 +74,44 @@ def compute_gravity(
 
 def correct_parents_threaded(
         lib, acc_units,
-        particles_x, particles_y, particles_z,
-        parent_mass, parent_x, parent_y, parent_z,
-        child_mass, child_x, child_y, child_z,
+        particles_pos,
+        parent_mass, 
+        parent_pos,
+        child_mass,
+        child_pos,
         removed_idx
-        ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        ):
     """
     Correct the gravitational influence of a parent particle on its child system.
     Args:
         lib (library):                   Library to compute gravity
         acc_units (units):               Units of acceleration
-        particles_x/y/z (units.length):  x/y/z coordinate of all particles
+        particles_pos (units.length):    x/y/z coordinate of all particles
         parent_mass (units.mass):        Mass of the parent particle
-        parent_x/y/z (units.length):     x/y/z coordinate of the parent particle
+        parent_pos (units.length):       x/y/z coordinate of the parent particle
         child_mass (units.mass):         Mass of the child particles
-        child_x/y/z (units.length):      x/y/z coordinate of the child particles
+        child_pos (units.length):        x/y/z coordinate of the child particles
         removed_idx (int):               Index of the parent particle in the original array
     Returns:
         tuple:  Acceleration array of parent particles (ax, ay, az)
     """
-    mask = np.ones(len(particles_x), dtype=bool)
+    external_x = particles_pos[0]
+    external_y = particles_pos[1]
+    external_z = particles_pos[2]
+    
+    parent_x = parent_pos[0]
+    parent_y = parent_pos[1]
+    parent_z = parent_pos[2]
+    
+    child_x = child_pos[0]
+    child_y = child_pos[1]
+    child_z = child_pos[2]
+    
+    mask = np.ones(len(external_x), dtype=bool)
     mask[removed_idx] = False
-    external_x = particles_x[mask]
-    external_y = particles_y[mask]
-    external_z = particles_z[mask]
+    external_x = external_x[mask]
+    external_y = external_y[mask]
+    external_z = external_z[mask]
 
     ax_chd, ay_chd, az_chd = compute_gravity(
         grav_lib=lib,
@@ -188,17 +205,23 @@ class CorrectionFromCompoundParticle(object):
                     correct_parents_threaded,
                     lib=self.lib,
                     acc_units=ACC_UNITS,
-                    particles_x=self.particles_x,
-                    particles_y=self.particles_y,
-                    particles_z=self.particles_z,
+                    particles_pos=[
+                        self.particles_x,
+                        self.particles_y,
+                        self.particles_z
+                    ],
                     parent_mass=parent.mass,
-                    parent_x=parent.x,
-                    parent_y=parent.y,
-                    parent_z=parent.z,
+                    parent_pos=[
+                        parent.x,
+                        parent.y,
+                        parent.z
+                    ],
                     child_mass=system.mass,
-                    child_x=system.x,
-                    child_y=system.y,
-                    child_z=system.z,
+                    child_pos=[
+                        system.x,
+                        system.y,
+                        system.z
+                    ],
                     removed_idx=removed_idx
                     )
                 futures.append(future)
@@ -314,8 +337,8 @@ class CorrectionKicks(object):
         """
         Apply correction kicks onto particles.
         Args:
-            grav_lib (Library):  The wrapped C++ gravity library.
-            avail_cpus (int):    Number of available CPU cores.
+            grav_lib (Library):  The gravity library (e.g., a wrapped C++ library).
+            avail_cpus (int):    Number of available CPU cores
         """
         self.lib = grav_lib
         self.avail_cpus = avail_cpus
@@ -387,8 +410,7 @@ class CorrectionKicks(object):
     def _correction_kicks(
             self, 
             particles: Particles, 
-            children: dict, 
-            dt
+            children: dict, dt
             ) -> None:
         """
         Apply correcting kicks onto children and parent particles.
@@ -446,8 +468,8 @@ class CorrectionKicks(object):
             futures = []
             with ThreadPoolExecutor(max_workers=self.avail_cpus) as executor:
                 try:
-                    for parent, children in children.values():
-                        future = process_children_jobs(parent, children)
+                    for parent, child in children.values():
+                        future = process_children_jobs(parent, child)
                         futures.append(future)
                     for future in as_completed(futures):
                         future.result()

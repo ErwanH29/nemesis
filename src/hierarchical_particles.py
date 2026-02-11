@@ -1,10 +1,11 @@
 
-############################## NOTES ##############################
-# Recentering subsystems is optimised. Even without GIL release, 
-# overhead of multiprocessing is too consuming. Most likely the 
-# AMUSE-based arrays (position/velocity) are already wrapped around 
-# NumPy arrays.
-###################################################################
+"""
+Recentering subsystems is optimised. Even without GIL release, 
+overhead of multiprocessing is too consuming. Most likely the 
+AMUSE-based arrays (position/velocity) are already wrapped around 
+NumPy arrays.
+"""
+
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
@@ -38,7 +39,7 @@ class HierarchicalParticles(ParticlesOverlay):
 
         return _parts
 
-    def assign_children(self, parent: Particle, child: Particles) -> Particle:
+    def assign_children(self, parent: Particle, child: Particles) -> None:
         """
         Assign children to parent particle. No reshifting needed
         Args:

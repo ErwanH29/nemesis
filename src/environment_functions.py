@@ -4,7 +4,7 @@ from sklearn.cluster import DBSCAN
 from amuse.datamodel import Particles
 from amuse.units import units
 
-from src.globals import MWG, PARENT_RADIUS_COEFF
+from src.globals import GRAV_CONST, MWG, PARENT_RADIUS_COEFF
 
 
 def connected_components_kdtree(system: Particles, threshold) -> list:
@@ -21,7 +21,7 @@ def connected_components_kdtree(system: Particles, threshold) -> list:
     criteria = threshold.value_in(units.m)
     clustering = DBSCAN(
         eps=criteria,
-        min_samples=1,  # Isolate single particles as their own component
+        min_samples=1,  # Allow single-particle clusters
         metric='euclidean',
         algorithm="kd_tree",
         n_jobs=1
@@ -37,7 +37,7 @@ def galactic_frame(parent_set: Particles, dx, dy, dz, dvx, dvy, dvz) -> Particle
     Shift particle set to galactic frame.
     Args:
         parent_set (Particles):      The particle set
-        dx/dy/dz (units.length):     x/y/z-position shift in the galactocentric frame
+        dx/dy/dz (units.length):     x/y/z-psotiion shift in the galactocentric frame
         dvx/dvy/dvz (units.length):  x/y/z-velocity shift in the galactocentric frame
     Returns:
         Particles: Particle set shifted to galactocentric coordinates
@@ -57,12 +57,12 @@ def galactic_frame(parent_set: Particles, dx, dy, dz, dvx, dvy, dvz) -> Particle
 def set_parent_radius(system_mass) -> units.au:
     """
     Merging radius of parent systems. Based on system crossing time.
-    - Too large → Poor angular momentum conservation, inaccurate center of mass.
-    - Too small → Excessive computation due to frequent small timesteps.
+        - Too large → Poor angular momentum conservation, inaccurate center of mass.
+        - Too small → Excessive computation due to frequent small timesteps.
     Args:
-       system_mass (units.mass):  Total mass of the system
+        system_mass (units.mass):  Total mass of the system
     Returns:
-       units.length: Merging radius of the parent system
+        units.length: Merging radius of the parent system
     """
     radius = PARENT_RADIUS_COEFF * (system_mass.value_in(units.MSun))**(1./3.)
     return radius
@@ -79,6 +79,25 @@ def hill_radius(m1, m2, drij) -> units.au:
         units.length: The Hill radius between the two bodies
     """
     return drij * (m1 / (3 * m2))**(1./3.)
+
+
+def specific_orbital_energy(orbitter, host, dr=None, dv=None) -> (units.ms)**2:
+    """
+    Compute the specific orbital energy between two bodies.
+    Args:
+        particle_a (Particle):  Particle computing the specific orbital energy for
+        particle_b (Particle):  Particle being orbited
+        drij (units.length):    Distance between the two bodies
+        dvij (units.velocity):  Relative velocity between the two bodies
+    Returns:
+        (units.ms)**2: The specific orbital energy between the two bodies
+    """
+    if dr is None:
+        dr  = (orbitter.position - host.position).lengths()
+    if dv is None:
+        dv = (orbitter.velocity - host.velocity)
+    dv2 = dv.lengths_squared()
+    return 0.5 *dv2 - GRAV_CONST * host.mass / dr
 
 
 def planet_radius(planet_mass) -> units.REarth:

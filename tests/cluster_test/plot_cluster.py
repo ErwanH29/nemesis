@@ -1,7 +1,7 @@
 from amuse.lab import read_set_from_file, units, Particles, constants
 from amuse.ext.orbital_elements import orbital_elements
 
-import natsort
+from natsort import natsorted
 import glob
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
@@ -12,7 +12,7 @@ import os
 from scipy import stats
 
 
-### Set some globals
+# Set some globals
 plt.rcParams["font.family"] = "Times New Roman"
 plt.rcParams["mathtext.fontset"] = "cm"
 
@@ -21,11 +21,10 @@ COLOURS = ["black", "dodgerblue"]
 LABELS = ["Ph4", "Nemesis"]
 LINESTYLE = ["-", "--"]
 MARKER_SIZE = [50, 20, 40, 10]
-LW = [8,3]
+LW = [8, 3]
 AXLABEL_SIZE = TICK_SIZE = 14
 
 DATA_DIR = "tests/cluster_test/data"
-
 
 
 def tickers(ax):
@@ -39,15 +38,15 @@ def tickers(ax):
     ax.xaxis.set_minor_locator(mtick.AutoMinorLocator())
     ax.yaxis.set_minor_locator(mtick.AutoMinorLocator())
     ax.tick_params(
-        axis="y", 
-        which='both', 
-        direction="in", 
+        axis="y",
+        which='both',
+        direction="in",
         labelsize=TICK_SIZE
     )
     ax.tick_params(
-        axis="x", 
-        which='both', 
-        direction="in", 
+        axis="x",
+        which='both',
+        direction="in",
         labelsize=TICK_SIZE
     )
 
@@ -56,8 +55,8 @@ def compare_visually(dir_data, nem_data):
     """
     Compare the direct and Nemesis data visually.
     Args:
-        dir_data (list):  List of data files assosciated to direct integration runs.
-        nem_data (list):  List of data files assosciated to Nemesis runs.
+        dir_data (list):  List of direct integration data files.
+        nem_data (list):  List of Nemesis integration data files.
     """
     out_dir = f"{SAVE_DIR}/visual_comparison/"
     os.makedirs(out_dir, exist_ok=True)
@@ -68,7 +67,7 @@ def compare_visually(dir_data, nem_data):
         for particles in [dir_particles, nem_particles]:
             particles.move_to_center()
 
-        ### Extract stars
+        # Extract stars
         star_nem = nem_particles[nem_particles.mass >= 0.08 | units.MSun]
         star_dir = dir_particles[dir_particles.mass >= 0.08 | units.MSun]
 
@@ -78,7 +77,7 @@ def compare_visually(dir_data, nem_data):
             dr = max(dr, (s.position - target.position).lengths())
         print(f"    Biggest displacement: drij = {dr.max().in_(units.au)}")
 
-        ### Extract asteroids
+        # Extract asteroids
         dir_ast = dir_particles[dir_particles.mass == (0. | units.kg)]
         nem_ast = nem_particles[nem_particles.mass == (0. | units.kg)]
         dir_particles -= dir_ast
@@ -87,23 +86,23 @@ def compare_visually(dir_data, nem_data):
         fig, ax = plt.subplots(figsize=(7, 6))
         for i, major in enumerate([dir_particles, nem_particles]):
             ax.scatter(
-                major.x.value_in(units.au), 
-                major.y.value_in(units.au), 
-                color=COLOURS[i], 
-                label=LABELS[i], 
+                major.x.value_in(units.au),
+                major.y.value_in(units.au),
+                color=COLOURS[i],
+                label=LABELS[i],
                 s=MARKER_SIZE[i],
                 zorder=2
             )
 
         for i, minor in enumerate([dir_ast, nem_ast]):
             ax.scatter(
-                minor.x.value_in(units.au), 
-                minor.y.value_in(units.au), 
-                color=colours_pastel[i+2], 
+                minor.x.value_in(units.au),
+                minor.y.value_in(units.au),
+                color=colours_pastel[i+2],
                 s=5, alpha=0.25,
                 zorder=3
             )
-        
+
         tickers(ax)
         ax.set_xlabel(r"$x$ [au]", fontsize=AXLABEL_SIZE)
         ax.set_ylabel(r"$y$ [au]", fontsize=AXLABEL_SIZE)
@@ -114,8 +113,8 @@ def compare_visually(dir_data, nem_data):
 
 def process_data(dir_data, nem_data):
     """
-    Save direct N-body and Nemesis integration eccentricity and 
-    semi-major axis data of asteroids.
+    Save direct N-body and Nemesis integration eccentricity
+    and semi-major axis data of asteroids.
     """
     def _save_kepler(binary, sma_df, ecc_df):
         kepler_elements = orbital_elements(binary, G=constants.G)
@@ -132,7 +131,7 @@ def process_data(dir_data, nem_data):
             host = system[system.mass.argmax()]
             asteroids = system[system.mass == 0. | units.kg]
             host_dic[host.original_key] = asteroids.original_key
-    
+
     for i, (p, q) in enumerate(zip(dir_data, nem_data)):
         px = read_set_from_file(p)
         qx = read_set_from_file(q)
@@ -144,28 +143,29 @@ def process_data(dir_data, nem_data):
                 f"    Nemesis snapshot: {q} ---> {len(qx)}"
                 )
         assert len(px) == len(qx)
-    
+
     dt_dir = read_set_from_file(dir_data[-1])
     dt_nem = read_set_from_file(nem_data[-1])
     ast_dir = dt_dir[dt_dir.mass == 0. | units.kg]
 
-    temp_dir_df = [[ ] for _ in range(2)]  # SMA, Ecc
-    temp_nem_df = [[ ] for _ in range(2)]
+    temp_dir_df = [[] for _ in range(2)]  # SMA, Ecc
+    temp_nem_df = [[] for _ in range(2)]
     for host_key, system_key in host_dic.items():
         host_dir = dt_dir[dt_dir.original_key == host_key]
         host_nem = dt_nem[dt_nem.original_key == host_key]
 
         for a_key in system_key:
-            ### First deal with Direct data
+            # First deal with Direct data
             target = ast_dir[ast_dir.original_key == a_key]
             binary = Particles(particles=[host_dir, target])
             _save_kepler(binary, temp_dir_df[0], temp_dir_df[1])
 
-            ### Then deal with Nemesis data
+            # Then deal with Nemesis data
             target = dt_nem[dt_nem.original_key == a_key]
             binary = Particles(particles=[host_nem, target])
             _save_kepler(binary, temp_nem_df[0], temp_nem_df[1])
-    print(f"#Sample Direct={len(temp_dir_df[0])}, #Sample Nemesis={len(temp_nem_df[0])}")
+    print(f"#Sample Direct={len(temp_dir_df[0])}", end=", ")
+    print(f"#Sample Nemesis={len(temp_nem_df[0])}")
     return temp_dir_df, temp_nem_df
 
 
@@ -174,23 +174,23 @@ def plot_cluster_cdf(dir_data, nem_data):
     fin_nem = read_set_from_file(nem_data[-1], "hdf5")
     for particles in [fin_dir, fin_nem]:
         particles.move_to_center()
-        
+
     dir_stars = fin_dir[fin_dir.mass > 0.08 | units.MSun]
     nem_stars = fin_nem[fin_nem.mass > 0.08 | units.MSun]
     dir_ast = fin_dir[fin_dir.mass == 0. | units.kg]
     nem_ast = fin_nem[fin_nem.mass == 0. | units.kg]
-    
-    velocity_df = [[ ], [ ]]
+
+    velocity_df = [[], []]
     fig, ax = plt.subplots(figsize=(7, 6))
     for i, data in enumerate([dir_stars, nem_stars, dir_ast, nem_ast]):
         velocities = data.velocity.lengths().value_in(units.kms)
         sorted_vel = np.sort(velocities)
         sample = np.arange(1, len(sorted_vel)+1) / len(sorted_vel)
         ax.plot(
-            sorted_vel, sample, 
-            color=COLOURS[i%2], 
-            ls=LINESTYLE[i//2], 
-            lw=LW[i%2]
+            sorted_vel, sample,
+            color=COLOURS[i % 2],
+            ls=LINESTYLE[i // 2],
+            lw=LW[i % 2]
             )
         if i < 2:  # Store velocity data of massive bodies
             velocity_df[i] = sorted_vel
@@ -205,20 +205,19 @@ def plot_cluster_cdf(dir_data, nem_data):
     plt.close()
 
     cramer = stats.cramervonmises_2samp(velocity_df[0], velocity_df[1])
-    print(f"    Cramer-von Miss test for stellar velocity distributions: {cramer}")
+    print(f"    Cramer-von Miss test for stellar velocity: {cramer}")
 
-
-    dr = [[ ], [ ]]
+    dr = [[], []]
     fig, ax = plt.subplots(figsize=(7, 6))
     for i, data in enumerate([dir_stars, nem_stars, dir_ast, nem_ast]):
         positions = data.position.lengths().value_in(units.au)
         sorted_pos = np.sort(positions)
         sample = np.arange(1, len(sorted_pos)+1) / len(sorted_pos)
         ax.plot(
-            sorted_pos, sample, 
-            color=COLOURS[i%2], 
-            ls=LINESTYLE[i//2], 
-            lw=LW[i%2]
+            sorted_pos, sample,
+            color=COLOURS[i % 2],
+            ls=LINESTYLE[i // 2],
+            lw=LW[i % 2]
             )
         if i < 2:
             ax.scatter(None, None, color=COLOURS[i], label=LABELS[i], s=50)
@@ -233,7 +232,7 @@ def plot_cluster_cdf(dir_data, nem_data):
     plt.close()
 
     cramer = stats.cramervonmises_2samp(dr[0], dr[1])
-    print(f"   Cramer-von Miss test for stellar position distributions: {cramer}")
+    print(f"   Cramer-von Miss test for star positions: {cramer}")
 
 
 def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
@@ -250,11 +249,11 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
         "sma": [[dir_sma_ast, nem_sma_ast], r"$a$ [au]", [2, 1e5]],
         "ecc": [[dir_ecc_ast, nem_ecc_ast], r"$e$", [1e-3, 1]]
     }
-    res_df = [[ ] for _ in range(2)]  # SMA, Ecc
+    res_df = [[] for _ in range(2)]  # SMA, Ecc
     for i, (fname, (df, xlabel, xlims)) in enumerate(data_dic.items()):
         fig, axs = plt.subplots(
-            2, 1, 
-            figsize=(6, 5), 
+            2, 1,
+            figsize=(6, 5),
             sharex=True,
             gridspec_kw={
                 "height_ratios": [1, 3],
@@ -274,7 +273,7 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
             sample_data = np.arange(1, len(sorted_data)+1) / len(sorted_data)
             axs[1].plot(sorted_data, sample_data, lw=2, color=COLOURS[j])
             axs[1].scatter([], [], color=COLOURS[j], label=LABELS[j], s=50)
-        
+
         sorted_nem = np.sort(df[1])
         sample_nem = np.arange(1, len(sorted_nem)+1) / len(sorted_nem)
         sorted_dir = np.sort(df[0])
@@ -300,7 +299,7 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
         axs[1].set_xlim(xlims)
         for ax in axs:
             tickers(ax)
-        if i==0:
+        if i == 0:
             for ax in axs:
                 ax.set_xscale("log")
             axs[0].set_xlim(xmin, 2. * xmax)
@@ -315,7 +314,7 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
         nem_sorted = np.asarray(np.sort(df[1]))
 
         anderson = stats.anderson_ksamp(
-            [dir_sorted, nem_sorted], 
+            [dir_sorted, nem_sorted],
             method=stats.PermutationMethod()
             )
         cramer = stats.cramervonmises_2samp(dir_sorted, nem_sorted)
@@ -339,10 +338,11 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
 
 def plot_ast_residual(dir_data, nem_data):
     """
-    Save direct N-body and Nemesis integration eccentricity and 
+    Save direct N-body and Nemesis integration eccentricity and
     semi-major axis data of asteroids.
     Args:
-        dir_data (list):  List of data files assosciated to direct integration runs.
+        dir_data (list):  List of data files assosciated to
+                          direct integration runs.
         nem_data (list):  List of data files assosciated to Nemesis runs.
     """
     initial_nem = read_set_from_file(nem_data[0])
@@ -353,18 +353,18 @@ def plot_ast_residual(dir_data, nem_data):
             host = system[system.mass.argmax()]
             asteroids = system[system.mass == 0. | units.kg]
             host_dic[host.original_key] = asteroids.original_key
-    
+
     dt_dir = read_set_from_file(dir_data[-1])
     dt_nem = read_set_from_file(nem_data[-1])
     ast_dir = dt_dir[dt_dir.mass == 0. | units.kg]
 
-    data = [ ]
+    data = []
     for i, (host_key, system_key) in enumerate(host_dic.items()):
         host_dir = dt_dir[dt_dir.original_key == host_key]
         host_nem = dt_nem[dt_nem.original_key == host_key]
 
         for a_key in system_key:
-            ### First deal with Direct data
+            # First deal with Direct data
             target = ast_dir[ast_dir.original_key == a_key]
             binary = Particles(particles=[host_dir, target])
             kepler_elements = orbital_elements(binary, G=constants.G)
@@ -373,7 +373,7 @@ def plot_ast_residual(dir_data, nem_data):
                 sma_value_dir = sma.value_in(units.au)
                 ecc_value_dir = ecc
 
-            ### Then deal with Nemesis data
+            # Then deal with Nemesis data
             target = dt_nem[dt_nem.original_key == a_key]
             binary = Particles(particles=[host_nem, target])
             kepler_elements = orbital_elements(binary, G=constants.G)
@@ -381,10 +381,10 @@ def plot_ast_residual(dir_data, nem_data):
             if kepler_elements[3] <= 1.:
                 sma_value_nem = sma.value_in(units.au)
                 ecc_value_nem = ecc
-            
+
             if ecc_value_nem <= 1. and ecc_value_dir <= 1.:
                 data.append((
-                    sma_value_dir, ecc_value_dir, 
+                    sma_value_dir, ecc_value_dir,
                     sma_value_nem, ecc_value_nem
                 ))
 
@@ -404,16 +404,16 @@ def plot_ast_residual(dir_data, nem_data):
         bins=[xbins, ybins]
     )
     Z = np.where(N >= 1, Z, np.nan)
-    
+
     fig, ax = plt.subplots(figsize=(7, 6))
     tickers(ax)
     pcm = ax.pcolormesh(
-        10**xedges, yedges, Z.T, 
+        10**xedges, yedges, Z.T,
         cmap='coolwarm_r',
         norm=colors.CenteredNorm(0)
-    )
+        )
 
-    ### Overplot number counts
+    # Overplot number counts
     x_centers = 0.5 * (xedges[:-1] + xedges[1:])
     y_centers = 0.5 * (yedges[:-1] + yedges[1:])
     for ix, xc in enumerate(x_centers):
@@ -437,7 +437,7 @@ def plot_ast_residual(dir_data, nem_data):
     ax.set_ylim(0, 1)
     ax.set_xscale("log")
     ax.set_xlim(10**xbins[0], 10**xbins[-1])
-    
+
     y = np.linspace(0, 1, 100)
     Rlink_max = [2*100*2**(1/3) / (1 + i) for i in y]
     Rpar_max = [100*2**(1/3) / (1 + i) for i in y]
@@ -452,10 +452,12 @@ def plot_ast_residual(dir_data, nem_data):
 
 def plot_energy(dir_df, nem_df):
     """Plot the energy evolution of the system"""
-    dE_array = [[ ] for _ in range(2)]  # Direct, Nemesis
+    dE_array = [[] for _ in range(2)]  # Direct, Nemesis
     for i, data_files in enumerate([dir_df, nem_df]):
+        Nfiles = len(data_files)
+
         for j, snapshot in enumerate(data_files):
-            print(f"\rProcessing file {j+1}/{len(data_files)}", end=" ", flush=True)
+            print(f"\rProcessing file {j+1}/{Nfiles}", end=" ", flush=True)
             p = read_set_from_file(snapshot)
             massives = p[p.mass > 0. | units.kg]
             if j == 0:
@@ -482,14 +484,15 @@ def plot_energy(dir_df, nem_df):
     plt.clf()
 
 
-dir_data = natsort.natsorted(glob.glob(f'{DATA_DIR}/cluster_run_direct/simulation_snapshot/*.hdf5'))
-nem_data = natsort.natsorted(glob.glob(f'{DATA_DIR}/cluster_run_nemesis/simulation_snapshot/*.hdf5'))
+path = "{}/{}/simulation_snapshot/snap_*.hdf5"
+dir_data = natsorted(glob.glob(path.format(DATA_DIR, "cluster_run_direct")))
+nem_data = natsorted(glob.glob(path.format(DATA_DIR, "cluster_run_nemesis")))
 
 Nsnaps = min(len(dir_data), len(nem_data))
 dir_data = dir_data[:Nsnaps]
 nem_data = nem_data[:Nsnaps]
 
-direct_initial  = read_set_from_file(dir_data[0])
+direct_initial = read_set_from_file(dir_data[0])
 Nemesis_initial = read_set_from_file(nem_data[0])
 dr = (direct_initial.position - Nemesis_initial.position).lengths()
 dv = (direct_initial.velocity - Nemesis_initial.velocity).lengths()
@@ -511,10 +514,10 @@ if dm.max() > (0. | units.MSun):
     )
 print("...Simulation has same IC confirmed.")
 
-print(f"...Plotting dE...")
+print("...Plotting dE...")
 plot_energy(dir_data, nem_data)
 
-print(f"...Comparing visually...")
+print("...Comparing visually...")
 compare_visually(dir_data, nem_data)
 
 print("...Cluster Overall CDF Plots...")
@@ -523,13 +526,13 @@ plot_cluster_cdf(dir_data, nem_data)
 print("...Processing Asteroids...")
 direct_df, nemesis_df = process_data(dir_data, nem_data)
 
-print(f"...Asteroids CDF Plots...")
+print("...Asteroids CDF Plots...")
 plot_ast_cdf(
-    direct_df[0], 
-    direct_df[1], 
-    nemesis_df[0], 
+    direct_df[0],
+    direct_df[1],
+    nemesis_df[0],
     nemesis_df[1]
 )
 
-print(f"...Asteroids Residuals Plot...")
+print("...Asteroids Residuals Plot...")
 plot_ast_residual(dir_data, nem_data)

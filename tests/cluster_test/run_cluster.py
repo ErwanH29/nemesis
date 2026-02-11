@@ -15,27 +15,27 @@ code_dt = 0.1
 
 if RUN_NEMESIS:
     run_simulation(
-        IC_file=IC_file, 
+        IC_file=IC_file,
         run_idx=0,
-        tend=tend, 
+        tend=tend,
         dtbridge=dt,
+        test_particle=False,
+        n_worker_parent=1,
         code_dt=code_dt,
         dt_diag=dt_diag,
-        gal_field=0, 
-        dE_track=1, 
-        star_evol=0, 
-        verbose=1,
-        test_particle=False
+        gal_field=0,
+        dE_track=1,
+        star_evol=0,
+        verbose=1
     )
 else:
     from amuse.community.ph4.interface import Ph4
     from amuse.lab import nbody_system, read_set_from_file, write_set_to_file
 
-    import os
     import time as cpu_time
 
     data_dir = "tests/cluster_test/data"
-    out_dir  = f"{data_dir}/cluster_run_direct/"
+    out_dir = f"{data_dir}/cluster_run_direct/"
     dirs = ["simulation_snapshot", "sim_stats", "energy_error"]
     for d in dirs:
         os.makedirs(f"{out_dir}/{d}", exist_ok=True)
@@ -47,7 +47,7 @@ else:
     major_bodies = particle_set[particle_set.mass > 0.08 | units.MSun]
 
     converter = nbody_system.nbody_to_si(
-        major_bodies.mass.sum(), 
+        major_bodies.mass.sum(),
         major_bodies.virial_radius()
         )
     code = Ph4(converter, number_of_workers=3)
@@ -60,8 +60,8 @@ else:
     write_set_to_file(
         particle_set,
         snapshot_dir.format(0),
-        'hdf5', 
-        close_file=True, 
+        'hdf5',
+        close_file=True,
         overwrite_file=True
     )
 
@@ -70,10 +70,10 @@ else:
     diag_step = dt_diag // dt
 
     t0 = cpu_time.time()
-    dE_arr = [ ]
+    dE_arr = []
     while time < tend:
         print("Time = ", time.in_(units.yr))
-        
+
         time += dt
         code.evolve_model(time)
         channel.copy()
@@ -81,13 +81,13 @@ else:
         step += 1
         if (step % diag_step) == 0:
             write_set_to_file(
-                particle_set, 
+                particle_set,
                 snapshot_dir.format(step),
-                'hdf5', 
-                close_file=True, 
+                'hdf5',
+                close_file=True,
                 overwrite_file=True
             )
-        
+
     t1 = cpu_time.time()
     with open(f"{out_dir}/sim_stats/sim_stats.txt", 'w') as f:
         f.write(f"Total CPU Time: {(t1-t0)/60} minutes")

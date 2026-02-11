@@ -16,6 +16,7 @@ PARENT_RADIUS_MAX = 300. | units.au
 
 ##### SI UNITS
 ACC_UNITS = units.m / units.s**2
+GRAV_CONST = constants.G
 SI_UNITS = (1. | units.kg * units.m**-2.) * constants.G
 
 ##### OTHER GLOBALS

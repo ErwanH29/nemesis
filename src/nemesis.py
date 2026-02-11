@@ -1,20 +1,21 @@
-############################################# NOTES ###############################################################
-####################################################################################################################
-####################################################################################################################
-# 1. Although split_subcodes can be parallelised, the benefit is very little and complexity
-#    outweighs it. No use in putting in lower-level language given dictionary look ups.
-####################################  OTHER ROOM FOR IMPROVEMENT  #################################################
-# 1. Flexible bridge times.
-# 2. Flexible parent radius. For instance, one can make the outer radius equal the boundary where 
-#    gravitational influence of nearest neighbour is some fraction of the center-of-mass.
-# 3. In _handle_collision(), the condition if remnant.key == children[nearest_mass].key 
-#    could be removed entirely. But needs testing to ensure no bugs.
-# 4. Logic of split_subcodes. Main bottleneck is in spawning codes, but parallelising is made difficult due to
-#    needing PID management. Could be significantly improved if a technique identifying which thread has which PID.
-# 5. In _process_parent_mergers(), recycling old codes would be more efficient.
-####################################################################################################################
-####################################################################################################################
-####################################################################################################################
+"""
+ROOM FOR IMPROVEMENT 
+1. Although split_subcodes can be parallelised, the benefit is very little and 
+    complexity outweighs it. No use in putting in lower-level language given 
+    dictionary look ups.
+2. Flexible bridge times.
+3. Flexible parent radius. For instance, one can make the outer radius equal 
+   the boundary where gravitational influence of nearest neighbour is some fraction 
+   of the center-of-mass.
+4. In _handle_collision(), the condition if remnant.key == children[nearest_mass].key 
+   could be removed entirely. But needs testing to ensure no bugs.
+5. Logic of split_subcodes. Main bottleneck is in spawning codes, but parallelising 
+   is made difficult due to needing PID management. Could be significantly improved 
+   if a technique identifying which thread has which PID.
+6. In _process_parent_mergers(), recycling old codes would be more efficient.
+7. Handling of binary stellar evolution with SeBa. Currently, if a binary is formed, 
+   the two stars are evolved as single stars.
+"""
 
  
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -41,14 +42,15 @@ from amuse.ext.basicgraph import UnionFind
 from amuse.ext.composition_methods import SPLIT_4TH_S_M6
 from amuse.ext.galactic_potentials import MWpotentialBovy2015
 from amuse.ext.orbital_elements import orbital_elements
-from amuse.units import units, constants, nbody_system
+from amuse.units import units, nbody_system
 
 from src.environment_functions import (
-    planet_radius, set_parent_radius, ZAMS_radius
+    set_parent_radius, planet_radius, ZAMS_radius
 )
 from src.globals import (
-    ASTEROID_RADIUS, EPS, MIN_EVOL_MASS, 
-    PARENT_RADIUS_MAX, PARENT_NWORKER
+    ASTEROID_RADIUS, EPS, GRAV_CONST,
+    MIN_EVOL_MASS, PARENT_RADIUS_MAX, 
+    PARENT_NWORKER
 )
 from src.grav_correctors import CorrectionKicks
 from src.hierarchical_particles import HierarchicalParticles
@@ -58,10 +60,11 @@ from src.split_children import split_subcodes
 class Nemesis(object):
     def __init__(
             self, 
-            par_conv, 
             dtbridge, 
             coll_dir, 
             test_particle,
+            n_worker_parent,
+            par_conv, 
             code_dt,
             free_cpus=os.cpu_count(), 
             nmerge=0,
@@ -74,10 +77,11 @@ class Nemesis(object):
         """
         Class setting up the simulation.
         Args:
-            par_conv (converter):      Parent N-body converter
             dtbridge (units.time):     Diagnostic time step
             coll_dir (str):            Path to store collision data
             test_particle (bool):      Flag to turn on/off test particle mode for splits.
+            n_worker_parent (int):     Number of workers for parent code
+            par_conv (converter):      Parent N-body converter
             code_dt (float):           Internal time step
             free_cpus(int):            Number of available CPUs
             nmerge (int):              Number of mergers loaded particle set has
@@ -95,7 +99,7 @@ class Nemesis(object):
         self.__lock = threading.Lock()
         self.__main_process = psutil.Process(os.getpid())
         self.__nmerge = nmerge
-        self.__par_nworker = PARENT_NWORKER
+        self.__par_nworker = n_worker_parent
         self.__resume_offset = resume_time
         self.__star_evol = star_evol
         self.__total_free_cpus = free_cpus
@@ -436,7 +440,7 @@ class Nemesis(object):
             code_particles (Particles):  Children particle set in grav. code
             children (Particles):  Children particle set in local memory
         Returns:
-            dict:  Dictionary item of newly created channel
+            dict:  Dictionary of newly created channel
         """
         grav_copy_variables = [
             "x", "y", "z", 
@@ -571,7 +575,11 @@ class Nemesis(object):
                 self._star_channel_copier()
 
             self._sync_local_to_grav()
-            split_subcodes(self)
+            split_subcodes(
+                nem_class=self, 
+                number_of_neighbours=int(1 * len(self.particles)), 
+                bridge_time=timestep
+                )
             self._sync_local_to_grav(child_sync=False)
             self._check_single_system()
 
@@ -686,7 +694,7 @@ class Nemesis(object):
                 code.particles.remove_particles(code.particles)
                 code.particles.add_particles(newparts)
                 newcode = code
-
+                
             self._set_worker_affinity(worker_pid)
             new_parent = self.particles[particle_keys == parent_key][0]
             new_parent.radius = min(scale_radius, PARENT_RADIUS_MAX)
@@ -832,7 +840,7 @@ class Nemesis(object):
         coll_a = enc_parti[0].as_particle_in_set(children)
         coll_b = enc_parti[1].as_particle_in_set(children)
         collider = Particles(particles=[coll_a, coll_b])
-        kepler_elements = orbital_elements(collider, G=constants.G)
+        kepler_elements = orbital_elements(collider, G=GRAV_CONST)
         sma = kepler_elements[2]
         ecc = kepler_elements[3]
         inc = kepler_elements[4]
