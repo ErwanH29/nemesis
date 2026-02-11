@@ -446,8 +446,8 @@ class CorrectionKicks(object):
             futures = []
             with ThreadPoolExecutor(max_workers=self.avail_cpus) as executor:
                 try:
-                    for parent, children in children.values():
-                        future = process_children_jobs(parent, children)
+                    for parent, child in children.values():
+                        future = process_children_jobs(parent, child)
                         futures.append(future)
                     for future in as_completed(futures):
                         future.result()
