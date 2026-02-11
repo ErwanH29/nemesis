@@ -1,6 +1,17 @@
-# NEMESIS
+# NEMESIS-depricated
 
 **Nemesis** is a flexible, **multi-physics**, **multi-scale algorithm** for integrating hierarchical systems (e.g., planetary systems in star clusters, circumstellar disks, or binaries in galactic environments) embedded within the [AMUSE](https://amuse.readthedocs.io/en/latest/) library.  
+
+# Nemesis has been depricated.
+
+**The development is continued on:** https://gitlab.strw.leidenuniv.nl/spz/nemesis <br />
+**Which can be cloned from:** git@gitlab.strw.leidenuniv.nl:spz/nemesis.git <br />
+
+Apologies for the inconvenience. <br />
+Simon Portegies Zwart
+
+<HR>
+<HR>
 
 Nemesis works by decoupling tight subsystems from the global environment, integrating them in isolation, and then synchronising the micro- and macroscales at regular intervals. This scheme allows:
 - High parallelisability
