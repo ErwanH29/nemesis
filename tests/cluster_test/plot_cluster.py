@@ -469,7 +469,7 @@ def plot_energy(dir_df, nem_df):
     for i, df in enumerate(dE_array):
         time = np.linspace(0, 0.1, len(df))
         ax.plot(time, df, color=COLOURS[i], lw=3-i)
-        print(df)
+
     ax.scatter(None, None, color=COLOURS[0], label=LABELS[0], s=50)
     ax.scatter(None, None, color=COLOURS[1], label=LABELS[1], s=50)
     ax.set_xlabel(r"$t$ [Myr]", fontsize=AXLABEL_SIZE)

@@ -99,6 +99,8 @@ class Nemesis(object):
         self.__resume_offset = resume_time
         self.__star_evol = star_evol
         self.__total_free_cpus = free_cpus
+        if test_particle:
+            raise NotImplementedError("Test particle mode is not implemented yet.")
         self._test_particle = test_particle
 
         # Protected attributes

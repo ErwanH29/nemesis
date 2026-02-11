@@ -25,7 +25,7 @@ if RUN_NEMESIS:
         dE_track=1, 
         star_evol=0, 
         verbose=1,
-        test_particle=True
+        test_particle=False
     )
 else:
     from amuse.community.ph4.interface import Ph4
