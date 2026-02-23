@@ -147,9 +147,7 @@ def plot_LZK() -> None:
 
         ax.set_xlim(time[0], time[-1])
         ax.legend(fontsize=axlabel_size, frameon=False)
-
-        fname = f"ZKL_plot_{fig_name}"
-        plt.savefig(f"tests/ZKL_test/{fname}.pdf", bbox_inches="tight")
+        plt.savefig(f"tests/ZKL_test/ZKL_plot_{fig_name}.pdf", bbox_inches="tight")
         plt.clf()
         plt.close(fig)
 
