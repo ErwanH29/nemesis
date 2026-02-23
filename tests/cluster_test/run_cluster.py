@@ -19,7 +19,7 @@ if RUN_NEMESIS:
         run_idx=0,
         tend=tend,
         dtbridge=dt,
-        test_particle=True,
+        test_particle=False,
         n_worker_parent=1,
         code_dt=code_dt,
         dt_diag=dt_diag,

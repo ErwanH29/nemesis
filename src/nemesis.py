@@ -12,6 +12,7 @@ Possible Room for Improvements:
    memory address and not their PID. Also, even when many mergers occur, it is
    not a bottle neck, so not a priority.
 6. _parent_merger() is relatively slow due to dictionary manipulation.
+7. Allow Kepler solvers if len(children) == 2. As of now, not done because of Stellar evolution.
 
 Extending the Physics:
 1. Handling of binary stellar evolution with SeBa. Currently, if a binary
@@ -311,15 +312,15 @@ class Nemesis(object):
 
         converter = nbody_system.nbody_to_si(scale_mass, scale_radius)
         PIDs_before = self._snapshot_worker_pids()
-        code = Ph4(
+        code = Huayno(
             converter,
             number_of_workers=number_of_workers,
             channel_type="sockets"
             )
         code.particles.add_particles(children)
-        code.parameters.epsilon_squared = (1. | units.au)**2.
+        code.parameters.epsilon_squared = (0. | units.au)**2.
         code.parameters.timestep_parameter = self.__code_dt
-        #code.set_integrator("SHARED10_COLLISIONS")
+        code.set_integrator("SHARED10_COLLISIONS")
 
         PIDs_after = self._snapshot_worker_pids()
         worker_PID = list(PIDs_after - PIDs_before)

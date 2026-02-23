@@ -1,0 +1,20 @@
+/home/erwanh/amuse/src/amuse/support/options.py:11: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+Warning: program compiled against libxml 212 using older 209
+...Starting Nemesis simulation Run 0...
+Job ID: 706156
+...Starting new simulation...
+Adding subsystem with syst_id = 1Adding subsystem with syst_id = 2Adding subsystem with syst_id = 3Adding subsystem with syst_id = 4Adding subsystem with syst_id = 5Adding subsystem with syst_id = 6Adding subsystem with syst_id = 7Adding subsystem with syst_id = 8Adding subsystem with syst_id = 9Adding subsystem with syst_id = 10Adding subsystem with syst_id = 11Adding subsystem with syst_id = 12Adding subsystem with syst_id = 13Adding subsystem with syst_id = 14Adding subsystem with syst_id = 15Adding subsystem with syst_id = 16Adding subsystem with syst_id = 17Adding subsystem with syst_id = 18Adding subsystem with syst_id = 19Adding subsystem with syst_id = 20Adding subsystem with syst_id = 21Adding subsystem with syst_id = 22Adding subsystem with syst_id = 23Adding subsystem with syst_id = 24Adding subsystem with syst_id = 25Adding subsystem with syst_id = 26Adding subsystem with syst_id = 27Adding subsystem with syst_id = 28Adding subsystem with syst_id = 29Adding subsystem with syst_id = 30System 1/30...Warning: program compiled against libxml 212 using older 209
+System 2/30...Warning: program compiled against libxml 212 using older 209
+System 3/30...Warning: program compiled against libxml 212 using older 209
+System 4/30...Warning: program compiled against libxml 212 using older 209
+System 5/30...Warning: program compiled against libxml 212 using older 209
+System 6/30...Warning: program compiled against libxml 212 using older 209
+System 7/30...Warning: program compiled against libxml 212 using older 209
+System 8/30...Warning: program compiled against libxml 212 using older 209
+System 9/30...Warning: program compiled against libxml 212 using older 209
+System 10/30...Warning: program compiled against libxml 212 using older 209
+System 11/30...Warning: program compiled against libxml 212 using older 209
+System 12/30...Warning: program compiled against libxml 212 using older 209
+System 13/30...Warning: program compiled against libxml 212 using older 209
+System 14/30...Warning: program compiled against libxml 212 using older 209

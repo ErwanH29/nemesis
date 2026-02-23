@@ -1,5 +1,5 @@
 """"
-STILL TO DO:
+Possible Room for Improvements:
 Parallelise algorithm. Namely, when checking
 friends-of-friends for each parent, then sequentially
 processing each parent followed by another parallel
@@ -10,6 +10,7 @@ small, one can use the grid-based method to check for splits.
 If the user wishes to simulate a large number of asteroids,
 the logic will need to be modified.
 """
+from __future__ import annotations
 
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -20,7 +21,7 @@ from amuse.datamodel import Particles
 from amuse.units import units
 
 from src.environment_functions import (
-    connected_components_kdtree, hill_radius, 
+    connected_components_kdtree, hill_radius,
     set_parent_radius
 )
 from src.globals import (
@@ -29,16 +30,21 @@ from src.globals import (
 )
 
 
-def _get_orb_properties(drij, dvij, mu, dr=None, dv2=None):
+def _get_orb_properties(
+    drij: units.length,
+    dvij: units.velocity,
+    mu,
+    dr=None, 
+    dv2=None
+) -> tuple:
     """
-    Extract eccentricity and periapsis distance between bodies.
+    Extract various orbital properties, assuming Keplerian orbits.
     Args: 
-        drij (array):    Relative position vector between bodies.
-        dvij (array):    Relative velocity vector between bodies.
-        mu (array):      Standard gravitational parameter of the system.
-        dr (array):      Relative distance between bodies.
-        dv2 (array):     Relative velocity squared between bodies.
-        get_rapo (bool): Whether to return apoapsis distance and specific energy.
+        drij (units.length):    Relative position vector between bodies.
+        dvij (units.velocity):  Relative velocity vector between bodies.
+        mu (array):             Standard gravitational parameter of the system.
+        dr (units.length):      Relative distance between bodies.
+        dv2 (units.velocity):   Relative velocity squared between bodies.
     Returns:
         ecc (array):   Eccentricity of the orbit.
         rp (array):    Periapsis distance of the orbit.
@@ -48,59 +54,55 @@ def _get_orb_properties(drij, dvij, mu, dr=None, dv2=None):
     h = drij.cross(dvij)
     h_sq = h.lengths_squared()
     ecc_sq = (1 + (2 * eps * h_sq) / (mu**2))
-    ecc_sq = np.maximum(ecc_sq, 0)
+    ecc_sq = np.maximum(ecc_sq, 0)  # Handle numerical issues
     ecc = np.sqrt(ecc_sq)
-    
-    unbound = eps >= 0.0 | eps.unit
 
     sma = -mu / (2 * eps)
     rapo = sma * (1 + ecc)
-    rapo[unbound] = np.inf | dr.unit
     rperi = h_sq / (mu * (1 + ecc))
+
+    unbound = eps >= 0.0 | eps.unit
+    rapo[unbound] = np.inf | dr.unit
 
     return rapo, eps, rperi
 
 
 def _get_dr_threshold(
-    np_set,
-    np_pos,
-    massive_ext,
-    number_of_neighbours
-    ) -> list:
+    new_parents: Particles,
+    ext_parents: Particles,
+    number_of_neighbours: int
+) -> list:
     """
-    Compute distance criterias between new parents and external parents.
-    Two critieras are computed:
-       1) First-order estimate of distance at end of next bridge step
-       2) Hill radius based on current positions and velocities
-    The minimum is used as splitting asteroid cutoff.
+    Compute distance criterias for each new parent. Two criterias are computed:
+       1) Hill radius based on current positions and velocities.
+       2) Current distance to nearest neighbor (NN) in the massive external set.
+
     Args:
-        np_set (Particles):          New parent particle set.
-        np_pos (array):              New parent positions in SI units.
-        massive_ext (Particles):     Massive external particle set.
+        new_parents (Particles):     New parent particle set.
+        ext_parents (Particles):     Massive external particle set.
         number_of_neighbours (int):  Number of neighbors for Hill radius.
     Returns:
         dr_criteria (list):  Minimum between Hill radius and distance
                              to nearest neighbor for each new parent.
     """
-    np_mass = np_set.mass[:, np.newaxis]
-    nparents = len(np_set)
-    K = nparents + number_of_neighbours
+    nparents = len(new_parents)
     rows = np.arange(nparents)
 
-    ext_pos = massive_ext.position
-    dr_grid = (np_pos[:, np.newaxis] - ext_pos)
+    ext_pos = ext_parents.position
+    dr_grid = new_parents.position[:, np.newaxis] - ext_pos  # (N_parents, N_ext, 3)
     dr2_grid = dr_grid.lengths()
 
-    same_key = (np_set.key[:, np.newaxis] == massive_ext.key)
+    same_key = new_parents.key[:, np.newaxis] == ext_parents.key
     if np.any(same_key):  # Exclude self
         dr2_grid[same_key] = np.inf | dr2_grid.unit
 
-    neigh_idx = np.argsort(dr2_grid, axis=1)[:, :K]
-    neighb_mass = massive_ext.mass[neigh_idx]
+    K = nparents + number_of_neighbours
+    neigh_idx = np.argsort(dr2_grid, axis=1)[:, :K]  # (N_parents, K)
     neighb_dist = dr2_grid[rows[:, np.newaxis], neigh_idx]
+    neighb_mass = ext_parents.mass[neigh_idx]
 
+    np_mass = new_parents.mass[:, np.newaxis]
     Rhill_grid = hill_radius(np_mass, neighb_mass, neighb_dist)
-
     dr_criteria = np.minimum(
         Rhill_grid.min(axis=1), 
         neighb_dist.min(axis=1)
@@ -110,150 +112,138 @@ def _get_dr_threshold(
 
 
 def _check_asteroid_splits(
-    nem_class,
-    asteroids,
-    new_parent_set,
-    massive_ext,
-    number_of_neighbours
+    nem_class: object,
+    asteroids: Particles,
+    new_parent_set: Particles,
+    ext_parents: Particles,
+    cluster_mass: units.mass,
+    cluster_com: units.length,
+    number_of_neighbours: int,
     ) -> Particles:
     """
-    Function to check for asteroid splits from parents. This is
-    added to mitigate the issue of comets, where they can be flagged
-    as ejected due to high eccentricity yet remain bound to parent
-    system. Such bodies add splitting + parent merger times.
+    Flag asteroid splits. This procedure is purely for asteroids
+    and mitigates the issue of comets, where they can be flagged
+    as ejected in the original method due to wide orbits but remain
+    bound to parent. Such bodies add splitting + parent merger times.
     Args:
         nem_class (Nemesis):         Nemesis instance.
         asteroids (Particles):       Asteroid particle set.
         new_parent_set (Particles):  New parent particle set.
-        massive_ext (Particles):     Massive external particle set.
+        ext_parents (Particles):     Parent particle set.
+        cluster_mass (units.mass):   Total mass of the cluster.
+        cluster_com (units.length):  Center of mass of the cluster.
         number_of_neighbours (int):  Number of neighbors for Hill radius.
-        bridge_time (units.time):    Nemesis bridge time step.
     """
     if len(new_parent_set) == 0 or len(asteroids) == 0:
         return asteroids
 
-    length_unit = asteroids.position.unit
-
-    n_asts = len(asteroids)
     new_keys = np.array(new_parent_set.key, dtype=np.uint64)
-    ext_keys = np.array(massive_ext.key, dtype=np.uint64)
-
+    ext_keys = np.array(ext_parents.key, dtype=np.uint64)
     keep_nn = ~np.isin(ext_keys, new_keys)
-    massive_ext_nn = massive_ext[keep_nn]  # Excludes new parents
-    if len(massive_ext_nn) == 0:  # New parents make up all massive externals
+    ext_parents_nn = ext_parents[keep_nn]  # Exclude new parents
+    if len(ext_parents_nn) == 0:  # New parents make up all massive externals
         return asteroids
 
     # Setup arrays to get nearest neighbours for asteroids
-    ast_r = asteroids.position
-    ast_v = asteroids.velocity
-    ast_xyz = ast_r.value_in(length_unit)
-    tree_ast = cKDTree(ast_xyz)
+    length_unit = asteroids.position.unit
 
-    ext_r = massive_ext_nn.position
-    ext_xyz = ext_r.value_in(length_unit)
-    mu_ext = GRAV_CONST * massive_ext_nn.mass
+    ast_pos = asteroids.position
+    ast_vel = asteroids.velocity
+    ast_pos_unitless = ast_pos.value_in(length_unit)
+    ast_tree = cKDTree(ast_pos_unitless)
 
     # Compute external gravitational field
-    drij_ast_to_ext = (ast_r[:, np.newaxis] - ext_r)         # (N_ast, N_ext, 3)
-    r_ast_to_ext = drij_ast_to_ext.lengths()                 # (N_ast, N_ext)
-    rhat = drij_ast_to_ext / r_ast_to_ext[:, :, np.newaxis]  # (N_ast, N_ext, 3)
+    ext_pos = ext_parents_nn.position
+    drij_ast_to_ext = (ast_pos[:, np.newaxis] - ext_pos)      # (N_ast, N_ext, 3)
+    dr_ast_to_ext = drij_ast_to_ext.lengths()                 # (N_ast, N_ext)
+    rhat = drij_ast_to_ext / dr_ast_to_ext[:, :, np.newaxis]  # (N_ast, N_ext, 3)
 
-    fg_scalar = mu_ext / r_ast_to_ext**2
-    fg_ext_vec = -rhat * fg_scalar[:, :, np.newaxis]         # (N_ast, N_ext, 3)
-    fg_ext_tot = fg_ext_vec.sum(axis=1)                      # (N_ast, 3)
-    fg_ext_mag = fg_ext_tot.lengths()                        # (N_ast, )
-    
+    fg_scalar = GRAV_CONST * ext_parents_nn.mass / dr_ast_to_ext**2
+    fg_ext_vec = -rhat * fg_scalar[:, :, np.newaxis]   # (N_ast, N_ext, 3)
+    fg_ext_mag = fg_ext_vec.sum(axis=1).lengths()      # (N_ast, )
+
     # Extract nearest neighbours for each asteroid
-    tree_ext = cKDTree(ext_xyz)
-    dr_ast_to_nn, ast_nn_idx = tree_ext.query(ast_xyz, k=1)
+    tree_ext = cKDTree(ext_pos.value_in(length_unit))
+    dr_ast_to_nn, ast_nn_idx = tree_ext.query(ast_pos_unitless, k=1)
     dr_ast_to_nn = dr_ast_to_nn | length_unit
-    eff_pot = -GRAV_CONST * massive_ext_nn.mass[ast_nn_idx] / dr_ast_to_nn
 
     # min(Hill radius, NN distance) for new parents
+    mu_np = GRAV_CONST * new_parent_set.mass
     newp_pos = new_parent_set.position
     newp_vel = new_parent_set.velocity
-
     dr_criteria = _get_dr_threshold(
         new_parent_set,
-        newp_pos,
-        massive_ext,
+        ext_parents,
         number_of_neighbours
         )
-    
-    cluster_mass = massive_ext_nn.mass.sum()
-    cluster_com = massive_ext_nn.center_of_mass()
+
+    dr_cluster = (newp_pos - cluster_com).lengths()
     cluster_tide = hill_radius(
         new_parent_set.mass,
         cluster_mass,
-        (newp_pos - cluster_com).lengths()
-    )
+        dr_cluster
+        )
 
+    n_asts = len(asteroids)
     ast_orb_energy = np.inf * np.ones(n_asts) | (units.ms)**2
     new_parent_key = np.full(n_asts, 0, dtype=np.uint64)
     for ip, new_par in enumerate(new_parent_set):
-        dr_crit = dr_criteria[ip]
-        dr_crit = min(dr_crit, cluster_tide[ip])
+        dr_crit = min(dr_criteria[ip], cluster_tide[ip])
 
-        # (1) Within dr_crit of new parent
-        cand1 = tree_ast.query_ball_point(
-            newp_pos[ip].value_in(length_unit), 
+        # Criteria 1: Asteroid within dr_crit of new parent
+        cand1 = ast_tree.query_ball_point(
+            newp_pos[ip].value_in(length_unit),
             r=dr_crit.value_in(length_unit)
             )
         if len(cand1) == 0:
             continue
-        
+
         cand1 = np.array(cand1)
-        drij1_c1 = ast_r[cand1] - newp_pos[ip]
-        dvij1_c1 = ast_v[cand1] - newp_vel[ip]
+        ast_nn_idx_c1 = ast_nn_idx[cand1]
+        drij1_c1 = ast_pos[cand1] - newp_pos[ip]
+        dvij1_c1 = ast_vel[cand1] - newp_vel[ip]
         dr1_c1 = drij1_c1.lengths()
         dv1_sq_c1 = dvij1_c1.lengths_squared()
-        
-        nn_pos_c1 = massive_ext_nn.position[ast_nn_idx[cand1]]
+
+        nn_pos_c1 = ext_parents_nn.position[ast_nn_idx_c1]
         dr_np_to_nn = (nn_pos_c1 - newp_pos[ip]).lengths()
-        
+
         # Hill radii of host wrt NN and NN wrt host
-        m_nn_c1 = massive_ext_nn.mass[ast_nn_idx[cand1]]
+        m_nn_c1 = ext_parents_nn.mass[ast_nn_idx_c1]
         Rhill_np = hill_radius(
-            new_par.mass, 
-            m_nn_c1, 
-            dr_np_to_nn
+            m1=new_par.mass,
+            m2=m_nn_c1,
+            dr=dr_np_to_nn
             )
         Rhill_nn = hill_radius(
-            m_nn_c1, 
-            new_par.mass, 
-            dr_np_to_nn
+            m1=m_nn_c1,
+            m2=new_par.mass,
+            dr=dr_np_to_nn
             )
 
-        mu_np = GRAV_CONST * new_par.mass
         rapo, eps_np, _ = _get_orb_properties(
             drij1_c1,
             dvij1_c1,
-            mu_np,
+            mu=mu_np[ip],
             dr=dr1_c1,
             dv2=dv1_sq_c1,
-        )
-        
-        rapo *= SPLIT_PARAM**2
-        # (2) Orbit does not impinge any of the three NN Hill radius
+            )
+
+        # Criteria 2: Orbit does not impinge NN Hill radius
         mask_2 = (rapo < Rhill_np) & (rapo < (dr_np_to_nn - Rhill_nn))
 
-        # (3) Bound to new parent
-        
-        fg_np = mu_np / rapo**2
+        # Criteria 3: New parent dominates local gravitational field
+        fg_np = mu_np[ip] / rapo**2
         mask_4 = fg_np > fg_ext_mag[cand1]
 
         mask = mask_2 & mask_4
-        
-        n4 = np.sum(mask_2) # KEEP
-        n6 = np.sum(mask_4) # KEEP
-        print(f"{n4} {n6}")
         if not np.any(mask):
             continue
 
         candidates = cand1[mask]
         eps = eps_np[mask]
 
-        # (6) Most bound to new parent
+        # Criteria 4: Most bound energetically to new parent
         bound_mask = eps < ast_orb_energy[candidates]
         idx = candidates[bound_mask]
         ast_orb_energy[idx] = eps[bound_mask]
@@ -292,7 +282,7 @@ def _check_asteroid_splits(
     if nem_class._verbose:
         print(f"...{Nbound} bound to new parents, {n_asts-Nbound} unbound...")
     
-    del massive_ext
+    del ext_parents
 
     return isolated
 
@@ -311,13 +301,13 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
     new_isolated = Particles()
     if nem_class._test_particle:
         split_ast_dic = {}
+        cluster_mass = nem_class.particles.mass.sum()
+        cluster_com = nem_class.particles.center_of_mass()
 
     for parent_key, (parent, subsys) in list(nem_class.children.items()):
-        par_rad = parent.radius
-        
         components = connected_components_kdtree(
             child_set=subsys,
-            threshold=SPLIT_PARAM * par_rad
+            threshold=SPLIT_PARAM * parent.radius
             )
         if len(components) <= 1:
             continue
@@ -344,8 +334,13 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
             sys = c.as_set()
             sys.position += par_pos
             sys.velocity += par_vel
+            
+            if nem_class._test_particle:
+                ast_mask = sys.mass == 0.0 | units.kg
+                has_massive = (len(sys) > 1) and (np.sum(~ast_mask) > 0)
+            else:
+                has_massive = len(sys) > 1
 
-            has_massive = (len(sys) > 1) and np.any(sys.mass.value_in(units.kg) > 0.0)
             if has_massive:
                 newparent = nem_class.particles.add_children(sys)
                 newparent_key = newparent.key
@@ -388,18 +383,14 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
 
             else:
                 if nem_class._test_particle:
-                    ast_mask = sys.mass == 0.0 | units.kg
                     asteroids.add_particles(sys[ast_mask])
                     new_isolated.add_particles(sys[~ast_mask])
-
                 else:
                     new_isolated.add_particles(sys)
 
-        if nem_class._test_particle:  # Could be parallelised
-            if len(new_parent_set) == 0 or len(asteroids) == 0:
-                continue
-
-            split_ast_dic[new_parent_set] = asteroids
+        if nem_class._test_particle:
+            if len(new_parent_set) != 0 and len(asteroids) != 0:
+                split_ast_dic[new_parent_set] = asteroids
 
         if not rework_code:  # Only triggered if pure ionisation
             code.cleanup_code()
@@ -407,8 +398,8 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
 
     if nem_class._test_particle:
         star_mask = nem_class.particles.mass > MIN_EVOL_MASS
-        massive_ext = nem_class.particles[star_mask].copy()
-        
+        ext_parents = nem_class.particles[star_mask].copy()
+
         cpu_nem = nem_class.avail_cpus
         no_syst = len(split_ast_dic)
         nworkers = max(1, min(cpu_nem//20, no_syst))
@@ -419,7 +410,9 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
                     nem_class=nem_class,
                     asteroids=asts,
                     new_parent_set=new_par,
-                    massive_ext=massive_ext,
+                    ext_parents=ext_parents,
+                    cluster_mass=cluster_mass,
+                    cluster_com=cluster_com,
                     number_of_neighbours=number_of_neighbours
                 ): new_par for new_par, asts in split_ast_dic.items()
             }
