@@ -234,9 +234,9 @@ def _check_asteroid_splits(
 
         # Criteria 3: New parent dominates local gravitational field
         fg_np = mu_np[ip] / rapo**2
-        mask_4 = fg_np > fg_ext_mag[cand1]
+        mask_3 = fg_np > fg_ext_mag[cand1]
 
-        mask = mask_2 & mask_4
+        mask = mask_2 & mask_3
         if not np.any(mask):
             continue
 
@@ -334,13 +334,9 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
             sys = c.as_set()
             sys.position += par_pos
             sys.velocity += par_vel
-            
-            if nem_class._test_particle:
-                ast_mask = sys.mass == 0.0 | units.kg
-                has_massive = (len(sys) > 1) and (np.sum(~ast_mask) > 0)
-            else:
-                has_massive = len(sys) > 1
 
+            ast_mask = sys.mass == 0.0 | units.kg
+            has_massive = (len(sys) > 1) and (np.sum(~ast_mask) > 0)
             if has_massive:
                 newparent = nem_class.particles.add_children(sys)
                 newparent_key = newparent.key
@@ -399,11 +395,7 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
     if nem_class._test_particle:
         star_mask = nem_class.particles.mass > MIN_EVOL_MASS
         ext_parents = nem_class.particles[star_mask].copy()
-
-        cpu_nem = nem_class.avail_cpus
-        no_syst = len(split_ast_dic)
-        nworkers = max(1, min(cpu_nem//20, no_syst))
-        with ThreadPoolExecutor(max_workers=nworkers) as executor:
+        with ThreadPoolExecutor(max_workers=nem_class.num_workers) as executor:
             futures = {
                 executor.submit(
                     _check_asteroid_splits,

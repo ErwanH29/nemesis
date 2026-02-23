@@ -77,7 +77,7 @@ src/globals.py:
 - `MIN_EVOL_MASS`: Stellar evolution mass threshold.
 - `PARENT_RADIUS_COEFF`: Parent radius scaling coefficient.
 - `PARENT_RADIUS_MAX`: Maximum parent radius.
-- `SPLIT_PARAM`: Child system linking length & background sensitivity tuning.
+- `SPLIT_PARAM`: Child system linking length.
 
 src/nemesis.py:
 - `_init_()`: Number of cores used when calculating correction kicks.

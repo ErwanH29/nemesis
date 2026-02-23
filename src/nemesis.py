@@ -146,7 +146,7 @@ class Nemesis(object):
         self._validate_initialization()
         self.CorrKicks = CorrectionKicks(
             grav_lib=self._load_grav_lib(),
-            nworkers=max(1, self.avail_cpus // 10)
+            nworkers=self.num_workers
             )
 
     def _validate_initialization(self) -> None:
@@ -548,7 +548,7 @@ class Nemesis(object):
 
     def _sync_local_to_grav(self, child_sync=True) -> None:
         """Sync local particle set to global integrator"""
-        self.particles.recenter_children(max_workers=max(1, self.avail_cpus//10))
+        self.particles.recenter_children(max_workers=self.num_workers)
         self.channels["from_parents_to_gravity"].copy()
         if child_sync:
             pid_dictionary = self._pid_workers
@@ -1245,3 +1245,8 @@ class Nemesis(object):
         Nworkers = self.__total_free_cpus - self.__par_nworker - 3
         ncpu = min(Nchildren, Nworkers)
         return max(1, ncpu)  # Ensure at least one CPU is available
+    
+    @property
+    def num_workers(self) -> int:
+        """Extract the number of workers currently active."""
+        return max(1, len(self.children) // 10)

@@ -530,7 +530,7 @@ def validate_runs(dir_data, nem_data):
 
 path = "{}/{}/simulation_snapshot/snap_*.hdf5"
 dir_data = natsorted(glob.glob(path.format(DATA_DIR, "cluster_run_direct")))
-nem_data = natsorted(glob.glob(path.format(DATA_DIR, "cluster_run_nemesis")))
+nem_data = natsorted(glob.glob(path.format(DATA_DIR, "cluster_run_nemesis_old")))
 
 Nsnaps = min(len(dir_data), len(nem_data))
 dir_data = dir_data[:Nsnaps]
