@@ -1,23 +1,27 @@
+from __future__ import annotations
+
 import numpy as np
 from sklearn.cluster import DBSCAN
 
 from amuse.datamodel import Particles
 from amuse.units import units
 
-from src.globals import GRAV_CONST, MWG, PARENT_RADIUS_COEFF
+from src.globals import MWG, PARENT_RADIUS_COEFF
 
 
-def connected_components_kdtree(system: Particles, threshold) -> list:
+def connected_components_kdtree(
+    child_set: Particles,
+    threshold: units.length
+) -> list:
     """
-    Returns a list of connected component subsets of particles.
-    Uses a KD-Tree for efficient spatial queries.
+    Returns a list of particles within some threshold linking length.
     Args:
-        system (Particles):        The particle set
-        threshold (units.length):  The distance threshold for connected components
+        child_set (Particles):     The particle set.
+        threshold (units.length):  Linking length.
     Returns:
         list: A list of connected component in form of AMUSE particles
     """
-    coords = system.position.value_in(units.m)
+    coords = child_set.position.value_in(units.m)
     criteria = threshold.value_in(units.m)
     clustering = DBSCAN(
         eps=criteria,
@@ -29,19 +33,26 @@ def connected_components_kdtree(system: Particles, threshold) -> list:
 
     labels = clustering.labels_
     unique_labels = set(labels)
-    return [system[labels == label] for label in unique_labels]
+    return [child_set[labels == label] for label in unique_labels]
 
 
-def galactic_frame(parent_set: Particles, dx, dy, dz, dvx, dvy, dvz) -> Particles:
+def galactic_frame(
+    parent_set: Particles,
+    dpos: units.length,
+    dvel: units.velocity
+) -> Particles:
     """
     Shift particle set to galactic frame.
     Args:
-        parent_set (Particles):      The particle set
-        dx/dy/dz (units.length):     x/y/z-psotiion shift in the galactocentric frame
-        dvx/dvy/dvz (units.length):  x/y/z-velocity shift in the galactocentric frame
+        parent_set (Particles):  The particle set.
+        dpos (units.length):     Position in the galacic frame.
+        dvel (units.velocity):   Velocity in the galacic frame.
     Returns:
         Particles: Particle set shifted to galactocentric coordinates
     """
+    dx, dy, dz = dpos
+    dvx, dvy, dvz = dvel
+
     parent_set.x += dx
     parent_set.y += dy
     parent_set.z += dz
@@ -54,11 +65,13 @@ def galactic_frame(parent_set: Particles, dx, dy, dz, dvx, dvy, dvz) -> Particle
     return parent_set
 
 
-def set_parent_radius(system_mass) -> units.au:
+def set_parent_radius(system_mass: units.mass) -> units.length:
     """
     Merging radius of parent systems. Based on system crossing time.
-        - Too large → Poor angular momentum conservation, inaccurate center of mass.
-        - Too small → Excessive computation due to frequent small timesteps.
+        - Too large → Poor angular momentum conservation
+        and inaccurate center of mass.
+        - Too small → Excessive computation due to frequent
+        small timesteps and poor resolution of wider orbits.
     Args:
         system_mass (units.mass):  Total mass of the system
     Returns:
@@ -68,45 +81,30 @@ def set_parent_radius(system_mass) -> units.au:
     return radius
 
 
-def hill_radius(m1, m2, drij) -> units.au:
+def hill_radius(
+    m1: units.mass,
+    m2: units.mass,
+    dr: units.length
+) -> units.length:
     """
     Compute the Hill radius between two bodies.
     Args:
-        m1 (units.mass): Mass of the first body
-        m2 (units.mass): Mass of the second body
-        drij (units.length): Distance between the two bodies
+        m1 (units.mass):    Mass of the first body
+        m2 (units.mass):    Mass of the second body
+        dr (units.length):  Distance between the two bodies
     Returns:
         units.length: The Hill radius between the two bodies
     """
-    return drij * (m1 / (3 * m2))**(1./3.)
+    return dr * (m1 / (3 * m2))**(1./3.)
 
 
-def specific_orbital_energy(orbitter, host, dr=None, dv=None) -> (units.ms)**2:
-    """
-    Compute the specific orbital energy between two bodies.
-    Args:
-        particle_a (Particle):  Particle computing the specific orbital energy for
-        particle_b (Particle):  Particle being orbited
-        drij (units.length):    Distance between the two bodies
-        dvij (units.velocity):  Relative velocity between the two bodies
-    Returns:
-        (units.ms)**2: The specific orbital energy between the two bodies
-    """
-    if dr is None:
-        dr  = (orbitter.position - host.position).lengths()
-    if dv is None:
-        dv = (orbitter.velocity - host.velocity)
-    dv2 = dv.lengths_squared()
-    return 0.5 *dv2 - GRAV_CONST * host.mass / dr
-
-
-def planet_radius(planet_mass) -> units.REarth:
+def planet_radius(planet_mass: units.mass) -> units.radius:
     """
     Compute planet radius (arXiv:2311.12593).
     Args:
-        planet_mass (units.mass):  Mass of the planet
+        planet_mass (units.mass):  Planet mass.
     Returns:
-        units.mass:  Planet radius
+        units.mass:  Planet radius.
     """
     mass_in_earth = planet_mass.value_in(units.MEarth)
 
@@ -114,16 +112,16 @@ def planet_radius(planet_mass) -> units.REarth:
         return (1. | units.REarth)*(mass_in_earth)**0.41
     elif mass_in_earth < 125:
         return (0.55 | units.REarth)*(mass_in_earth)**0.65
-    return (14.3 | units.REarth)*(mass_in_earth)**(-0.02) 
+    return (14.3 | units.REarth)*(mass_in_earth)**(-0.02)
 
 
-def ZAMS_radius(star_mass) -> units.RSun:
+def ZAMS_radius(star_mass) -> units.radius:
     """
     Define stellar radius at ZAMS.
     Args:
-        star_mass (units.mass):  Mass of the star
+        star_mass (units.mass):  Mass of star.
     Returns:
-        units.length:  The ZAMS radius of the star
+        units.length:  The ZAMS radius of the star.
     """
     mass_in_sun = star_mass.value_in(units.MSun)
     mass_sq = (mass_in_sun)**2.

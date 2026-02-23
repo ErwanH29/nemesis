@@ -61,12 +61,6 @@ def plot_LZK() -> None:
             if len(snapshot) == 0:
                 continue
             bodies = read_set_from_file(snapshot, format='hdf5')
-            if j == 0:
-                Etot = bodies.potential_energy() + bodies.kinetic_energy()
-            elif j % 500 == 0:
-                E = bodies.potential_energy() + bodies.kinetic_energy()
-                dE = (E - Etot)/Etot
-                print(f"\nEnergy error: {dE:.2e}")
 
             print(f"\rProgress: {100*j/len(data):.2f}%", end=" ")
             sun = bodies[bodies.mass.argmax()]

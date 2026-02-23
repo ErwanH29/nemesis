@@ -27,11 +27,11 @@ AXLABEL_SIZE = TICK_SIZE = 14
 DATA_DIR = "tests/cluster_test/data"
 
 
-def tickers(ax):
+def tickers(ax) -> None:
     """
     Function to setup axis
     Args:
-        ax (axis):  Axis needing cleaning up
+        ax (axis):  Axis needing cleaning up.
     """
     ax.yaxis.set_ticks_position('both')
     ax.xaxis.set_ticks_position('both')
@@ -51,7 +51,7 @@ def tickers(ax):
     )
 
 
-def compare_visually(dir_data, nem_data):
+def compare_visually(dir_data, nem_data) -> None:
     """
     Compare the direct and Nemesis data visually.
     Args:
@@ -75,7 +75,7 @@ def compare_visually(dir_data, nem_data):
         for s in star_nem:
             target = star_dir[star_dir.original_key == s.original_key]
             dr = max(dr, (s.position - target.position).lengths())
-        print(f"    Biggest displacement: drij = {dr.max().in_(units.au)}")
+        print(f"    Maximum star drij = {dr.max().in_(units.au)}")
 
         # Extract asteroids
         dir_ast = dir_particles[dir_particles.mass == (0. | units.kg)]
@@ -116,10 +116,10 @@ def process_data(dir_data, nem_data):
     Save direct N-body and Nemesis integration eccentricity
     and semi-major axis data of asteroids.
     """
-    def _save_kepler(binary, sma_df, ecc_df):
+    def _save_kepler(binary, sma_df, ecc_df, rtide):
         kepler_elements = orbital_elements(binary, G=constants.G)
         sma, ecc = kepler_elements[2], kepler_elements[3]
-        if kepler_elements[3] <= 1.:
+        if kepler_elements[3] <= 1. and sma * (1 + ecc) <= rtide:
             sma_df.append(sma.value_in(units.au))
             ecc_df.append(ecc)
 
@@ -132,20 +132,12 @@ def process_data(dir_data, nem_data):
             asteroids = system[system.mass == 0. | units.kg]
             host_dic[host.original_key] = asteroids.original_key
 
-    for i, (p, q) in enumerate(zip(dir_data, nem_data)):
-        px = read_set_from_file(p)
-        qx = read_set_from_file(q)
-        if len(px) != len(qx):
-            raise AssertionError(
-                "!!! Particle count mismatch !!!\n"
-                f"    Pair #{i}\n"
-                f"    Direct snapshot: {p} ----> {len(px)}"
-                f"    Nemesis snapshot: {q} ---> {len(qx)}"
-                )
-        assert len(px) == len(qx)
-
     dt_dir = read_set_from_file(dir_data[-1])
     dt_nem = read_set_from_file(nem_data[-1])
+    dt_dir.move_to_center()
+    dt_nem.move_to_center()
+
+    nem_stars = dt_nem[dt_nem.mass > 0.08 | units.MSun]
     ast_dir = dt_dir[dt_dir.mass == 0. | units.kg]
 
     temp_dir_df = [[] for _ in range(2)]  # SMA, Ecc
@@ -155,15 +147,19 @@ def process_data(dir_data, nem_data):
         host_nem = dt_nem[dt_nem.original_key == host_key]
 
         for a_key in system_key:
+            ext = nem_stars - host_nem
+            drij = (ext.position - host_nem.position).lengths()
+            rtide = drij.min() * (host.mass / ext[drij.argmin()].mass)**(1/3)
+
             # First deal with Direct data
             target = ast_dir[ast_dir.original_key == a_key]
             binary = Particles(particles=[host_dir, target])
-            _save_kepler(binary, temp_dir_df[0], temp_dir_df[1])
+            _save_kepler(binary, temp_dir_df[0], temp_dir_df[1], rtide)
 
             # Then deal with Nemesis data
             target = dt_nem[dt_nem.original_key == a_key]
             binary = Particles(particles=[host_nem, target])
-            _save_kepler(binary, temp_nem_df[0], temp_nem_df[1])
+            _save_kepler(binary, temp_nem_df[0], temp_nem_df[1], rtide)
     print(f"#Sample Direct={len(temp_dir_df[0])}", end=", ")
     print(f"#Sample Nemesis={len(temp_nem_df[0])}")
     return temp_dir_df, temp_nem_df
@@ -205,7 +201,7 @@ def plot_cluster_cdf(dir_data, nem_data):
     plt.close()
 
     cramer = stats.cramervonmises_2samp(velocity_df[0], velocity_df[1])
-    print(f"    Cramer-von Miss test for stellar velocity: {cramer}")
+    print(f"    Test for stellar velocity: {cramer}")
 
     dr = [[], []]
     fig, ax = plt.subplots(figsize=(7, 6))
@@ -232,7 +228,7 @@ def plot_cluster_cdf(dir_data, nem_data):
     plt.close()
 
     cramer = stats.cramervonmises_2samp(dr[0], dr[1])
-    print(f"   Cramer-von Miss test for star positions: {cramer}")
+    print(f"   Test for star positions: {cramer}")
 
 
 def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
@@ -306,7 +302,10 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
         res_lims = axs[0].get_ylim()
         max_y = max(abs(res_lims[0]), abs(res_lims[1]))
         axs[0].set_ylim(-max_y, max_y)
-        plt.savefig(f"{SAVE_DIR}/cdf_{fname}.pdf", dpi=300, bbox_inches='tight')
+        plt.savefig(
+            f"{SAVE_DIR}/cdf_{fname}.pdf",
+            dpi=300, bbox_inches='tight'
+            )
         plt.clf()
         plt.close()
 
@@ -389,14 +388,15 @@ def plot_ast_residual(dir_data, nem_data):
                 ))
 
     arr = np.asarray(data)
-    a_dir, e_dir, _, e_nem = arr.T
+    a_dir, e_dir, a_nem, e_nem = arr.T
 
+    sma_nem_log = np.log10(a_nem)
     sma_dir_log = np.log10(a_dir)
     xbins = np.linspace(np.log10(4), np.log10(1000), 15)
     ybins = np.linspace(0, 1.0, 15)
 
     decc = e_nem - e_dir
-    N, _, _ = np.histogram2d(sma_dir_log, e_dir, bins=[xbins, ybins])
+    N, _, _ = np.histogram2d(sma_nem_log, e_nem, bins=[xbins, ybins])
 
     Z, xedges, yedges, _ = stats.binned_statistic_2d(
         sma_dir_log, e_dir, decc,
@@ -454,10 +454,7 @@ def plot_energy(dir_df, nem_df):
     """Plot the energy evolution of the system"""
     dE_array = [[] for _ in range(2)]  # Direct, Nemesis
     for i, data_files in enumerate([dir_df, nem_df]):
-        Nfiles = len(data_files)
-
         for j, snapshot in enumerate(data_files):
-            print(f"\rProcessing file {j+1}/{Nfiles}", end=" ", flush=True)
             p = read_set_from_file(snapshot)
             massives = p[p.mass > 0. | units.kg]
             if j == 0:
@@ -484,6 +481,53 @@ def plot_energy(dir_df, nem_df):
     plt.clf()
 
 
+def validate_runs(dir_data, nem_data):
+    """
+    Validate that both tested runs have identical initial conditions
+    and same particle counts for each snapshot.
+    Args:
+        dir_data (list):  List of direct integration data files.
+        nem_data (list):  List of Nemesis integration data files.
+    """
+    direct_initial = read_set_from_file(dir_data[0])
+    Nemesis_initial = read_set_from_file(nem_data[0])
+    dr = (direct_initial.position - Nemesis_initial.position).lengths()
+    dv = (direct_initial.velocity - Nemesis_initial.velocity).lengths()
+    dm = direct_initial.mass - Nemesis_initial.mass
+
+    # Ensure initial conditions are the same for both simulations
+    if dr.max() > (0. | units.m):
+        raise AssertionError(
+            f"Error: Particle not initialised the same."
+            f" Maximum dr = {dr.max().in_(units.m)}"
+            )
+    if dv.max() > (0. | units.kms):
+        raise AssertionError(
+            f"Error: Particle not initialised the same. "
+            f" Maximum dv = {dv.max().in_(units.kms)}"
+            )
+    if dm.max() > (0. | units.MSun):
+        raise AssertionError(
+            f"Error: Particle not initialised the same. "
+            f" Maximum dm = {dm.max().in_(units.MSun)}"
+        )
+    print("Simulation has same IC confirmed.")
+
+    # Ensure particle counts match for each snapshot
+    for i, (p, q) in enumerate(zip(dir_data, nem_data)):
+        px = read_set_from_file(p)
+        qx = read_set_from_file(q)
+        if len(px) != len(qx):
+            raise AssertionError(
+                "!!! Particle count mismatch !!!\n"
+                f"    Pair #{i}\n"
+                f"    Direct snapshot: {p} ----> {len(px)}"
+                f"    Nemesis snapshot: {q} ---> {len(qx)}"
+                )
+        assert len(px) == len(qx)
+    print("Simulation has same particle counts confirmed.")
+
+
 path = "{}/{}/simulation_snapshot/snap_*.hdf5"
 dir_data = natsorted(glob.glob(path.format(DATA_DIR, "cluster_run_direct")))
 nem_data = natsorted(glob.glob(path.format(DATA_DIR, "cluster_run_nemesis")))
@@ -492,27 +536,8 @@ Nsnaps = min(len(dir_data), len(nem_data))
 dir_data = dir_data[:Nsnaps]
 nem_data = nem_data[:Nsnaps]
 
-direct_initial = read_set_from_file(dir_data[0])
-Nemesis_initial = read_set_from_file(nem_data[0])
-dr = (direct_initial.position - Nemesis_initial.position).lengths()
-dv = (direct_initial.velocity - Nemesis_initial.velocity).lengths()
-dm = direct_initial.mass - Nemesis_initial.mass
-if dr.max() > (0. | units.m):
-    raise AssertionError(
-        f"Error: Particle not initialised the same."
-        f" Maximum dr = {dr.max().in_(units.m)}"
-        )
-if dv.max() > (0. | units.kms):
-    raise AssertionError(
-        f"Error: Particle not initialised the same. "
-        f" Maximum dv = {dv.max().in_(units.kms)}"
-        )
-if dm.max() > (0. | units.MSun):
-    raise AssertionError(
-        f"Error: Particle not initialised the same. "
-        f" Maximum dm = {dm.max().in_(units.MSun)}"
-    )
-print("...Simulation has same IC confirmed.")
+print("...Validating runs...")
+validate_runs(dir_data, nem_data)
 
 print("...Plotting dE...")
 plot_energy(dir_data, nem_data)
