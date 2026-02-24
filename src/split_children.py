@@ -418,7 +418,11 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
                 ): new_par for new_par, asts in split_ast_dic.items()
             }
             for future in as_completed(futures):
-                results.append(future.result())
+                try:
+                    results.append(future.result())
+                except Exception as exc:
+                    nem_class.cleanup_code()
+                    raise RuntimeError(f"Error in asteroid split check: {exc}")
 
         _process_asteroid_splits(nem_class, results, new_rogue)
 

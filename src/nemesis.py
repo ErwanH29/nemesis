@@ -1225,9 +1225,7 @@ class Nemesis(object):
                         self.cleanup_code()
                     else:
                         self.cleanup_code(first_clean=False)
-                    print(f"Error while evolving parent {parent_key}: {e}")
-                    print(f"Traceback: {traceback.format_exc()}")
-                    sys.exit()
+                    raise Exception(f"Error while evolving parent {parent_key}: {e}")
 
     @property
     def model_time(self) -> float:
