@@ -25,8 +25,10 @@ from src.environment_functions import (
     set_parent_radius
 )
 from src.globals import (
-    SPLIT_PARAM, GRAV_CONST, 
-    MIN_EVOL_MASS, PARENT_RADIUS_MAX
+    SPLIT_PARAM,
+    GRAV_CONST,
+    MIN_EVOL_MASS,
+    PARENT_RADIUS_MAX,
 )
 
 
@@ -34,12 +36,12 @@ def _get_orb_properties(
     drij: units.length,
     dvij: units.velocity,
     mu,
-    dr=None, 
-    dv2=None
+    dr: units.length,
+    dv2: units.velocity
 ) -> tuple:
     """
     Extract various orbital properties, assuming Keplerian orbits.
-    Args: 
+    Args:
         drij (units.length):    Relative position vector between bodies.
         dvij (units.velocity):  Relative velocity vector between bodies.
         mu (array):             Standard gravitational parameter of the system.
@@ -75,7 +77,7 @@ def _get_dr_threshold(
     """
     Compute distance criterias for each new parent. Two criterias are computed:
        1) Hill radius based on current positions and velocities.
-       2) Current distance to nearest neighbor (NN) in the massive external set.
+       2) Current distance to nearest neighbor in the massive external set.
 
     Args:
         new_parents (Particles):     New parent particle set.
@@ -89,7 +91,7 @@ def _get_dr_threshold(
     rows = np.arange(nparents)
 
     ext_pos = ext_parents.position
-    dr_grid = new_parents.position[:, np.newaxis] - ext_pos  # (N_parents, N_ext, 3)
+    dr_grid = new_parents.position[:, np.newaxis] - ext_pos  # (N_par N_ext, 3)
     dr2_grid = dr_grid.lengths()
 
     same_key = new_parents.key[:, np.newaxis] == ext_parents.key
@@ -97,14 +99,14 @@ def _get_dr_threshold(
         dr2_grid[same_key] = np.inf | dr2_grid.unit
 
     K = nparents + number_of_neighbours
-    neigh_idx = np.argsort(dr2_grid, axis=1)[:, :K]  # (N_parents, K)
+    neigh_idx = np.argsort(dr2_grid, axis=1)[:, :K]  # (N_par K)
     neighb_dist = dr2_grid[rows[:, np.newaxis], neigh_idx]
     neighb_mass = ext_parents.mass[neigh_idx]
 
     np_mass = new_parents.mass[:, np.newaxis]
     Rhill_grid = hill_radius(np_mass, neighb_mass, neighb_dist)
     dr_criteria = np.minimum(
-        Rhill_grid.min(axis=1), 
+        Rhill_grid.min(axis=1),
         neighb_dist.min(axis=1)
         )
 
@@ -112,27 +114,29 @@ def _get_dr_threshold(
 
 
 def _check_asteroid_splits(
-    nem_class: object,
     asteroids: Particles,
     new_parent_set: Particles,
     ext_parents: Particles,
     cluster_mass: units.mass,
     cluster_com: units.length,
     number_of_neighbours: int,
-    ) -> Particles:
+) -> list:
     """
     Flag asteroid splits. This procedure is purely for asteroids
     and mitigates the issue of comets, where they can be flagged
     as ejected in the original method due to wide orbits but remain
     bound to parent. Such bodies add splitting + parent merger times.
     Args:
-        nem_class (Nemesis):         Nemesis instance.
         asteroids (Particles):       Asteroid particle set.
         new_parent_set (Particles):  New parent particle set.
         ext_parents (Particles):     Parent particle set.
         cluster_mass (units.mass):   Total mass of the cluster.
         cluster_com (units.length):  Center of mass of the cluster.
         number_of_neighbours (int):  Number of neighbors for Hill radius.
+    Returns:
+        new_parent_map (dict):   Mapping of new parent keys to particles.
+        new_parent_key (array):  Array of new parent keys for each asteroid.
+        asteroids (Particles):   Original asteroid set for reference.
     """
     if len(new_parent_set) == 0 or len(asteroids) == 0:
         return asteroids
@@ -154,8 +158,8 @@ def _check_asteroid_splits(
 
     # Compute external gravitational field
     ext_pos = ext_parents_nn.position
-    drij_ast_to_ext = (ast_pos[:, np.newaxis] - ext_pos)      # (N_ast, N_ext, 3)
-    dr_ast_to_ext = drij_ast_to_ext.lengths()                 # (N_ast, N_ext)
+    drij_ast_to_ext = (ast_pos[:, np.newaxis] - ext_pos)  # (N_ast, N_ext, 3)
+    dr_ast_to_ext = drij_ast_to_ext.lengths()  # (N_ast, N_ext)
     rhat = drij_ast_to_ext / dr_ast_to_ext[:, :, np.newaxis]  # (N_ast, N_ext, 3)
 
     fg_scalar = GRAV_CONST * ext_parents_nn.mass / dr_ast_to_ext**2
@@ -249,56 +253,60 @@ def _check_asteroid_splits(
         ast_orb_energy[idx] = eps[bound_mask]
         new_parent_key[idx] = new_par.key
 
-    unique_keys = np.unique(new_parent_key)
+    del ext_parents
     new_parent_map = {p.key: p for p in new_parent_set}
 
-    if nem_class._verbose:
-        Nbound = 0
+    return (new_parent_map, new_parent_key, asteroids)
 
-    isolated = Particles()
-    for new_key in unique_keys:
-        mask = new_parent_key == new_key
-        children = asteroids[mask]
-        if new_key == 0:  # Unbound asteroids
-            isolated = children
-            continue
 
-        if nem_class._verbose:
-            Nbound += len(children)
+def _process_asteroid_splits(
+    nem_class: object,
+    results: list,
+    new_rogue: Particles
+) -> None:
+    """
+    Process asteroid splits and add them to the appropriate child systems.
+    Args:
+        nem_class (object):      Nemesis instance.
+        results (list):          List of tuples containing new parent maps,
+                                 keys, and asteroid sets.
+        new_rogue (Particles):   Set to accumulate newly isolated asteroids.
+    """
+    for new_parent_map, new_parent_key, asteroids in results:
+        unique_keys = np.unique(new_parent_key)
+        for new_key in unique_keys:
+            mask = (new_parent_key == new_key)
+            children = asteroids[mask]
+            if new_key == 0:  # Unbound asteroids
+                new_rogue.add_particles(children)
+                continue
 
-        new_parent = new_parent_map[new_key]
-        children.position -= new_parent.position
-        children.velocity -= new_parent.velocity
+            new_parent = new_parent_map[new_key]
+            children.position -= new_parent.position
+            children.velocity -= new_parent.velocity
 
-        nem_class.resume_workers(nem_class._pid_workers[new_key])
-        subsystem = nem_class.children[new_key][1]
-        subcode = nem_class.subcodes[new_key]
-        
-        child_as_set = children.as_set()
-        subsystem.add_particles(child_as_set)
-        subcode.particles.add_particles(child_as_set)
-        nem_class.hibernate_workers(nem_class._pid_workers[new_key])
+            nem_class.resume_workers(nem_class._pid_workers[new_key])
+            subsystem = nem_class.children[new_key][1]
+            subcode = nem_class.subcodes[new_key]
 
-    if nem_class._verbose:
-        print(f"...{Nbound} bound to new parents, {n_asts-Nbound} unbound...")
-    
-    del ext_parents
-
-    return isolated
+            child_as_set = children.as_set()
+            subsystem.add_particles(child_as_set)
+            subcode.particles.add_particles(child_as_set)
+            nem_class.hibernate_workers(nem_class._pid_workers[new_key])
 
 
 def split_subcodes(nem_class, number_of_neighbours) -> None:
     """
     Check for any isolated children
     Args:
-        nem_class (Nemesis):         Nemesis instance.
+        nem_class (object):         Nemesis instance.
         number_of_neighbours (int):  Number of neighbors for Hill radius.
     """
     if nem_class._verbose:
         print("...Checking Splits...")
 
     Nsplits = 0
-    new_isolated = Particles()
+    new_rogue = Particles()
     if nem_class._test_particle:
         split_ast_dic = {}
         cluster_mass = nem_class.particles.mass.sum()
@@ -307,7 +315,7 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
     for parent_key, (parent, subsys) in list(nem_class.children.items()):
         components = connected_components_kdtree(
             child_set=subsys,
-            threshold=SPLIT_PARAM * parent.radius
+            threshold=SPLIT_PARAM * parent.radius / 2.
             )
         if len(components) <= 1:
             continue
@@ -380,9 +388,9 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
             else:
                 if nem_class._test_particle:
                     asteroids.add_particles(sys[ast_mask])
-                    new_isolated.add_particles(sys[~ast_mask])
+                    new_rogue.add_particles(sys[~ast_mask])
                 else:
-                    new_isolated.add_particles(sys)
+                    new_rogue.add_particles(sys)
 
         if nem_class._test_particle:
             if len(new_parent_set) != 0 and len(asteroids) != 0:
@@ -394,32 +402,34 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
 
     if nem_class._test_particle:
         star_mask = nem_class.particles.mass > MIN_EVOL_MASS
-        ext_parents = nem_class.particles[star_mask].copy()
+        ext_parents = nem_class.particles[star_mask]
+
+        results = []
         with ThreadPoolExecutor(max_workers=nem_class.num_workers) as executor:
             futures = {
                 executor.submit(
                     _check_asteroid_splits,
-                    nem_class=nem_class,
                     asteroids=asts,
                     new_parent_set=new_par,
-                    ext_parents=ext_parents,
+                    ext_parents=ext_parents.copy(),  # Otherwise crashes due to concurrent access
                     cluster_mass=cluster_mass,
                     cluster_com=cluster_com,
                     number_of_neighbours=number_of_neighbours
                 ): new_par for new_par, asts in split_ast_dic.items()
             }
             for future in as_completed(futures):
-                isolated = future.result()
-                new_isolated.add_particles(isolated)
+                results.append(future.result())
 
-    if len(new_isolated) > 0:
+        _process_asteroid_splits(nem_class, results, new_rogue)
+
+    if len(new_rogue) > 0:
         if nem_class._verbose:
-            print(f"{len(new_isolated)} new rogue bodies...")
+            print(f"{len(new_rogue)} new rogue bodies...")
 
-        new_isolated.radius = set_parent_radius(new_isolated.mass)
-        mask = new_isolated.radius > PARENT_RADIUS_MAX
-        new_isolated[mask].radius = PARENT_RADIUS_MAX
-        nem_class.particles.add_particles(new_isolated)
+        new_rogue.radius = set_parent_radius(new_rogue.mass)
+        mask = new_rogue.radius > PARENT_RADIUS_MAX
+        new_rogue[mask].radius = PARENT_RADIUS_MAX
+        nem_class.particles.add_particles(new_rogue)
 
     if nem_class._verbose:
         print(f"{Nsplits} splits processed...")

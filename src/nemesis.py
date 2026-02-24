@@ -12,7 +12,6 @@ Possible Room for Improvements:
    memory address and not their PID. Also, even when many mergers occur, it is
    not a bottle neck, so not a priority.
 6. _parent_merger() is relatively slow due to dictionary manipulation.
-7. Allow Kepler solvers if len(children) == 2. As of now, not done because of Stellar evolution.
 
 Extending the Physics:
 1. Handling of binary stellar evolution with SeBa. Currently, if a binary
@@ -21,6 +20,15 @@ Extending the Physics:
    Nemesis fashion.
 3. Inclusion of hydro code in child worker to allow for gas accretion
    and disc evolution within embedded environments.
+
+Other:
+- Huayno can solve Kepler equations. This would yield energy errors at
+  numerical precision and give quicker results, but the difference is
+  minimal since a two-body children will not be the bottle neck.
+  Nevertheless, if you wish to implement this, you will need to change
+  how the recycling of children is done in _process_parent_mergers()
+  and split_subcodes() since if you go from an N -> 2 or a 2 -> N-body system,
+  recycling will no longer work.
 """
 from __future__ import annotations
 
@@ -377,7 +385,7 @@ class Nemesis(object):
             except ProcessLookupError:
                 self.cleanup_code()
                 raise ProcessLookupError(
-                    "Process {pid} not found. "
+                    f"Process {pid} not found. "
                     f"It may have exited. {traceback.format_exc()}"
                 )
             except PermissionError:
@@ -570,7 +578,6 @@ class Nemesis(object):
 
         self.evolve_time = self.model_time
         kick_corr = timestep
-        self.old_all = self.particles.all()
         while self.model_time < (self.evolve_time + timestep) * (1. - EPS):
             self.dt_step += 1
 
@@ -1245,8 +1252,9 @@ class Nemesis(object):
         Nworkers = self.__total_free_cpus - self.__par_nworker - 3
         ncpu = min(Nchildren, Nworkers)
         return max(1, ncpu)  # Ensure at least one CPU is available
-    
+
     @property
     def num_workers(self) -> int:
         """Extract the number of workers currently active."""
-        return max(1, len(self.children) // 10)
+        nworker = max(1, len(self.children) // 5)
+        return min(nworker, self.avail_cpus)

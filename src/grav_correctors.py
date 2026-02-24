@@ -351,24 +351,33 @@ class CorrectionKicks(object):
         self,
         particles: Particles,
         corr_code: object,
-        dt: units.time
+        dt: units.time,
+        parent_set: bool
     ) -> None:
         """
         Apply correction kicks onto target particles.
         Args:
-            particles (Particles):  Particles whose accelerations are corrected.
+            particles (Particles):  Particles whose accelerations
+                                    are corrected.
             corr_code (object):     Class computing correction kicks.
             dt (units.time):        Nemesis bridge time step.
+            parent_set (bool):      If target particles are the
+                                    parent particles.
         """
-        parts = particles.copy()
         ax, ay, az = corr_code.get_gravity_at_point()
 
-        parts.vx = particles.vx + dt * ax
-        parts.vy = particles.vy + dt * ay
-        parts.vz = particles.vz + dt * az
+        if parent_set:
+            parts = particles.copy()
+            parts.vx = particles.vx + dt * ax
+            parts.vy = particles.vy + dt * ay
+            parts.vz = particles.vz + dt * az
 
-        channel = parts.new_channel_to(particles)
-        channel.copy_attributes(["vx", "vy", "vz"])
+            channel = parts.new_channel_to(particles)
+            channel.copy_attributes(["vx", "vy", "vz"])
+        else:
+            particles.vx = particles.vx + dt * ax
+            particles.vy = particles.vy + dt * ay
+            particles.vz = particles.vz + dt * az
 
     def _correct_children(
             self,
@@ -380,7 +389,7 @@ class CorrectionKicks(object):
             par_y: units.length,
             par_z: units.length,
             child: Particles,
-            dt
+            dt: units.time
             ) -> None:
         """
         Apply correcting kicks onto children particles.
@@ -409,7 +418,7 @@ class CorrectionKicks(object):
             pert_y=pert_y,
             pert_z=pert_z,
             )
-        self._kick_particles(child, corr_par, dt)
+        self._kick_particles(child, corr_par, dt, parent_set=False)
 
     def _correction_kicks(
             self,
@@ -463,7 +472,12 @@ class CorrectionKicks(object):
                 chd=children,
                 nworkers=self.nworkers
                 )
-            self._kick_particles(particles, corr_chd, dt)
+            self._kick_particles(
+                particles,
+                corr_chd,
+                dt,
+                parent_set=True
+            )
 
             futures = []
             with ThreadPoolExecutor(max_workers=self.nworkers) as executor:

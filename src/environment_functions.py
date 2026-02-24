@@ -45,8 +45,8 @@ def galactic_frame(
     Shift particle set to galactic frame.
     Args:
         parent_set (Particles):  The particle set.
-        dpos (units.length):     Position in the galacic frame.
-        dvel (units.velocity):   Velocity in the galacic frame.
+        dpos (units.length):     Position in the galactic frame.
+        dvel (units.velocity):   Velocity in the galactic frame.
     Returns:
         Particles: Particle set shifted to galactocentric coordinates
     """

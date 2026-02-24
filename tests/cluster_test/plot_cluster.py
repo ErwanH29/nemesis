@@ -340,9 +340,9 @@ def plot_ast_residual(dir_data, nem_data):
     Save direct N-body and Nemesis integration eccentricity and
     semi-major axis data of asteroids.
     Args:
-        dir_data (list):  List of data files assosciated to
+        dir_data (list):  List of data files associated to
                           direct integration runs.
-        nem_data (list):  List of data files assosciated to Nemesis runs.
+        nem_data (list):  List of data files associated to Nemesis runs.
     """
     initial_nem = read_set_from_file(nem_data[0])
     host_dic = {}
@@ -530,7 +530,7 @@ def validate_runs(dir_data, nem_data):
 
 path = "{}/{}/simulation_snapshot/snap_*.hdf5"
 dir_data = natsorted(glob.glob(path.format(DATA_DIR, "cluster_run_direct")))
-nem_data = natsorted(glob.glob(path.format(DATA_DIR, "cluster_run_nemesis_old")))
+nem_data = natsorted(glob.glob(path.format(DATA_DIR, "cluster_run_nemesis")))
 
 Nsnaps = min(len(dir_data), len(nem_data))
 dir_data = dir_data[:Nsnaps]
