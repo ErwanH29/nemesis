@@ -34,6 +34,8 @@ examples/Nrun*
 *.mp4
 *.hdf5
 *.amuse
+*.txt
+*.log
 
 # Debugging files
 src/debugger.py
