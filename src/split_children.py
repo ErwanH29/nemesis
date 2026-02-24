@@ -1,9 +1,13 @@
 """"
 Possible Room for Improvements:
-Parallelise algorithm. Namely, when checking
-friends-of-friends for each parent, then sequentially
-processing each parent followed by another parallel
-scheme to check for asteroid splits.
+    1. Parallelise algorithm. Dictionary look ups and
+       current recycling of old code complicates this.
+    2. Remove hand-wavey dependence (Rpar and SPLIT_PARAMS)
+       from parent radius. Ideally, this would be some fraction
+       of Hill radius with a similar calculation to _get_dr_threshold,
+       but preliminary tests show a pure-physics approach is too
+       agressive and some hybrid model was needed. For future work.
+            - Machine learning adaptable parent radius?
 
 NOTE: Since number of asteroids per system is typically
 small, one can use the grid-based method to check for splits.
@@ -315,7 +319,7 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
     for parent_key, (parent, subsys) in list(nem_class.children.items()):
         components = connected_components_kdtree(
             child_set=subsys,
-            threshold=SPLIT_PARAM * parent.radius / 2.
+            threshold=SPLIT_PARAM * parent.radius
             )
         if len(components) <= 1:
             continue

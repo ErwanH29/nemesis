@@ -43,7 +43,6 @@ import signal
 import threading
 import time
 import traceback
-import sys
 
 from amuse.community.huayno.interface import Huayno
 from amuse.community.ph4.interface import Ph4
