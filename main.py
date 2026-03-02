@@ -190,12 +190,12 @@ def run_simulation(
             brdg_dt = float(brdg_dt) | units.yr
             end_time = float(end_time) | units.Myr
 
-        if end_time != tend:
-            print("WARNING: End time is not the same as before.")
         if brdg_dt != dtbridge:
             print("WARNING: Bridge timestep is not the same as before.")
         if diag_dt != dt_diag:
             print("WARNING: Diagnostic timestep is not the same as before.")
+        if end_time != tend:
+            print("WARNING: End time is not the same as before.")
 
         snapshot_path = os.path.join(dir_path, "simulation_snapshot")
         previous_snaps = natsorted(glob.glob(os.path.join(snapshot_path, "*")))

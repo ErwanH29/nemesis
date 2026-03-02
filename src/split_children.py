@@ -8,11 +8,17 @@ Possible Room for Improvements:
        but preliminary tests show a pure-physics approach is too
        agressive and some hybrid model was needed. For future work.
             - Machine learning adaptable parent radius?
+    3. In the edge-case where asteroids get ejected and the only new parent
+       is also rogue, the current method will not flag any splits. This will
+       be dealt with in the next drift, but could be optimised by checking
+       for this scenario here, although it requires further complexity in
+       the logic.
 
-NOTE: Since number of asteroids per system is typically
-small, one can use the grid-based method to check for splits.
-If the user wishes to simulate a large number of asteroids,
-the logic will need to be modified.
+Notes
+    1. Since the number of asteroids per system is typically
+       small, grid-based calculations can be used to check for splits.
+       For a large number of asteroids (>10^4), this will be memory-heavy
+       and the logic will need to be modified.
 """
 from __future__ import annotations
 
@@ -124,7 +130,7 @@ def _check_asteroid_splits(
     cluster_mass: units.mass,
     cluster_com: units.length,
     number_of_neighbours: int,
-) -> list:
+) -> tuple:
     """
     Flag asteroid splits. This procedure is purely for asteroids
     and mitigates the issue of comets, where they can be flagged
@@ -140,17 +146,23 @@ def _check_asteroid_splits(
     Returns:
         new_parent_map (dict):   Mapping of new parent keys to particles.
         new_parent_key (array):  Array of new parent keys for each asteroid.
-        asteroids (Particles):   Original asteroid set for reference.
+        asteroids (Particles):   Original asteroid set.
     """
-    if len(new_parent_set) == 0 or len(asteroids) == 0:
-        return asteroids
+    n_asts = len(asteroids)
+    new_parent_key = np.full(n_asts, 0, dtype=np.uint64)
+    new_parent_map = {p.key: p for p in new_parent_set}
+    if len(new_parent_set) == 0:
+        return (new_parent_map, new_parent_key, asteroids)
 
     new_keys = np.array(new_parent_set.key, dtype=np.uint64)
     ext_keys = np.array(ext_parents.key, dtype=np.uint64)
     keep_nn = ~np.isin(ext_keys, new_keys)
     ext_parents_nn = ext_parents[keep_nn]  # Exclude new parents
     if len(ext_parents_nn) == 0:  # New parents make up all massive externals
-        return asteroids
+        raise NotImplementedError(
+            "No massive parents exist beyond new parents."
+            " This edge case is not currently handled."
+            )
 
     # Setup arrays to get nearest neighbours for asteroids
     length_unit = asteroids.position.unit
@@ -192,9 +204,7 @@ def _check_asteroid_splits(
         dr_cluster
         )
 
-    n_asts = len(asteroids)
     ast_orb_energy = np.inf * np.ones(n_asts) | (units.ms)**2
-    new_parent_key = np.full(n_asts, 0, dtype=np.uint64)
     for ip, new_par in enumerate(new_parent_set):
         dr_crit = min(dr_criteria[ip], cluster_tide[ip])
 
@@ -258,7 +268,6 @@ def _check_asteroid_splits(
         new_parent_key[idx] = new_par.key
 
     del ext_parents
-    new_parent_map = {p.key: p for p in new_parent_set}
 
     return (new_parent_map, new_parent_key, asteroids)
 
@@ -286,17 +295,55 @@ def _process_asteroid_splits(
                 continue
 
             new_parent = new_parent_map[new_key]
-            children.position -= new_parent.position
-            children.velocity -= new_parent.velocity
+            worker_pid = nem_class._pid_workers.get(new_key)
 
-            nem_class.resume_workers(nem_class._pid_workers[new_key])
-            subsystem = nem_class.children[new_key][1]
-            subcode = nem_class.subcodes[new_key]
+            if worker_pid is not None:  # Subcode already exists, add to it
+                nem_class.resume_workers(worker_pid)
+                subsystem = nem_class.children[new_key][1]
+                subcode = nem_class.subcodes[new_key]
+                channel = nem_class._child_channels[new_key]
 
-            child_as_set = children.as_set()
-            subsystem.add_particles(child_as_set)
-            subcode.particles.add_particles(child_as_set)
-            nem_class.hibernate_workers(nem_class._pid_workers[new_key])
+                children.position -= new_parent.position
+                children.velocity -= new_parent.velocity
+
+                subcode.particles.add_particles(children)
+                subsystem.add_particles(children)
+                channel["from_gravity_to_children"].copy()
+
+                nem_class.hibernate_workers(worker_pid)
+
+            else:  # New parent was isolated, need to create new subcode
+                children.add_particle(new_parent)  # Already in cluster frame
+                new_rogue.remove_particle(new_parent)
+
+                newparent = nem_class.particles.add_children(children)
+                new_key = newparent.key
+                scale_mass = newparent.mass
+                scale_radius = set_parent_radius(scale_mass)
+                newparent.radius = scale_radius
+
+                newcode, worker_pid = nem_class._sub_worker(
+                    children=children,
+                    scale_mass=scale_mass,
+                    scale_radius=scale_radius
+                )
+
+                nem_class._set_worker_affinity(worker_pid)
+                nem_class._time_offsets[newcode] = nem_class.model_time
+                nem_class._cpu_time[new_key] = 0.0 | units.s
+                nem_class.subcodes[new_key] = newcode
+
+                channel = nem_class._child_channel_maker(
+                    parent_key=new_key,
+                    code_set=newcode.particles,
+                    children=children
+                )
+                channel["from_children_to_gravity"].copy()  # More precise
+
+                nem_class._pid_workers[new_key] = worker_pid
+                nem_class.hibernate_workers(worker_pid)
+                
+                subsystem = nem_class.children[new_key][1]
 
 
 def split_subcodes(nem_class, number_of_neighbours) -> None:
@@ -309,10 +356,9 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
     if nem_class._verbose:
         print("...Checking Splits...")
 
-    Nsplits = 0
     new_rogue = Particles()
     if nem_class._test_particle:
-        split_ast_dic = {}
+        split_ast_list = []
         cluster_mass = nem_class.particles.mass.sum()
         cluster_com = nem_class.particles.center_of_mass()
 
@@ -324,10 +370,6 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
         if len(components) <= 1:
             continue
 
-        if nem_class._verbose:
-            Nsplits += 1
-
-        new_parent_set = Particles()
         rework_code = False
         par_vel = parent.velocity
         par_pos = parent.position
@@ -341,7 +383,10 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
         nem_class._child_channels.pop(parent_key)
         cpu_time = nem_class._cpu_time.pop(parent_key)
 
-        asteroids = Particles()
+        if nem_class._test_particle:
+            new_parent_set = Particles()
+            asteroids = Particles()
+
         for c in components:
             sys = c.as_set()
             sys.position += par_pos
@@ -354,7 +399,6 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
                 newparent_key = newparent.key
                 if nem_class._test_particle:
                     new_parent_set.add_particle(newparent)
-                    new_parent_set[-1].original_key = newparent_key
 
                 scale_mass = newparent.mass
                 scale_radius = set_parent_radius(scale_mass)
@@ -397,8 +441,8 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
                     new_rogue.add_particles(sys)
 
         if nem_class._test_particle:
-            if len(new_parent_set) != 0 and len(asteroids) != 0:
-                split_ast_dic[new_parent_set] = asteroids
+            if len(asteroids) > 0:
+                split_ast_list.append((new_parent_set, asteroids))
 
         if not rework_code:  # Only triggered if pure ionisation
             code.cleanup_code()
@@ -419,7 +463,8 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
                     cluster_mass=cluster_mass,
                     cluster_com=cluster_com,
                     number_of_neighbours=number_of_neighbours
-                ): new_par for new_par, asts in split_ast_dic.items()
+                ): new_par
+                for new_par, asts in split_ast_list
             }
             for future in as_completed(futures):
                 try:
@@ -438,6 +483,3 @@ def split_subcodes(nem_class, number_of_neighbours) -> None:
         mask = new_rogue.radius > PARENT_RADIUS_MAX
         new_rogue[mask].radius = PARENT_RADIUS_MAX
         nem_class.particles.add_particles(new_rogue)
-
-    if nem_class._verbose:
-        print(f"{Nsplits} splits processed...")

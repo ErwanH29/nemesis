@@ -149,7 +149,9 @@ class Nemesis(object):
         self.dE_track = dE_track
         self.corr_energy = 0. | units.J
 
-        self._major_channel_maker()
+        if self.__star_evol:
+            self._star_to_parents_chnl()
+
         self._validate_initialization()
         self.CorrKicks = CorrectionKicks(
             grav_lib=self._load_grav_lib(),
@@ -416,46 +418,17 @@ class Nemesis(object):
                     f"Traceback: {traceback.format_exc()}"
                 )
 
-    def _major_channel_maker(self) -> None:
-        """Create channels for communication between codes"""
+    def _star_to_parents_chnl(self) -> None:
+        """Create channels to copy stellar attributes to parent code."""
         parent_particles = self.parent_code.particles
-        phase_space = ["x", "y", "z", "vx", "vy", "vz"]
-        if self.__star_evol:
-            self.channels = {
-                "from_stellar_to_gravity":
-                    self.stellar_code.particles.new_channel_to(
-                        parent_particles,
-                        attributes=["mass"],
-                        target_names=["mass"]
-                    ),
-                "from_gravity_to_parents":
-                    parent_particles.new_channel_to(
-                        self.particles,
-                        attributes=phase_space,
-                        target_names=phase_space
-                    ),
-                "from_parents_to_gravity":
-                    self.particles.new_channel_to(
-                        parent_particles,
-                        attributes=phase_space,
-                        target_names=phase_space
-                    )
-            }
-        else:
-            self.channels = {
-                "from_gravity_to_parents":
-                    parent_particles.new_channel_to(
-                        self.particles,
-                        attributes=phase_space,
-                        target_names=phase_space
-                    ),
-                "from_parents_to_gravity":
-                    self.particles.new_channel_to(
-                        parent_particles,
-                        attributes=phase_space,
-                        target_names=phase_space
-                    )
-            }
+        self.channels = {
+            "from_stellar_to_gravity":
+                self.stellar_code.particles.new_channel_to(
+                    parent_particles,
+                    attributes=["mass"],
+                    target_names=["mass"]
+                ),
+        }
 
     def _child_channel_maker(
             self,
@@ -544,7 +517,6 @@ class Nemesis(object):
 
     def _sync_grav_to_local(self, child_sync=True) -> None:
         """Sync gravity particles to local set"""
-        self.channels["from_gravity_to_parents"].copy()
         if child_sync:
             pid_dictionary = self._pid_workers
             for parent_key, channel in self._child_channels.items():
@@ -556,7 +528,6 @@ class Nemesis(object):
     def _sync_local_to_grav(self, child_sync=True) -> None:
         """Sync local particle set to global integrator"""
         self.particles.recenter_children(max_workers=self.num_workers)
-        self.channels["from_parents_to_gravity"].copy()
         if child_sync:
             pid_dictionary = self._pid_workers
             for parent_key, channel in self._child_channels.items():
