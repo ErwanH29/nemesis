@@ -74,7 +74,6 @@ class Nemesis(object):
             self,
             dtbridge: units.time,
             code_dt: units.time,
-            test_particle: bool,
             n_worker_parent: int,
             par_conv: nbody_system.nbody_to_si,
             coll_dir: str,
@@ -91,7 +90,6 @@ class Nemesis(object):
         Args:
             dtbridge (units.time):     Diagnostic time step.
             code_dt (float):           Internal time step.
-            test_particle (bool):      Tune split mode.
             n_worker_parent (int):     Number of workers for parent code.
             par_conv (converter):      Parent N-body converter.
             coll_dir (str):            Path to store collision data.
@@ -124,7 +122,6 @@ class Nemesis(object):
         self._verbose = verbose
         self._parent_conv = par_conv
         self._MWG = MWpotentialBovy2015()
-        self._test_particle = test_particle
         self._coll_parents = dict()
         self._coll_children = dict()
         self._isolated_mergers = dict()
@@ -321,15 +318,15 @@ class Nemesis(object):
 
         converter = nbody_system.nbody_to_si(scale_mass, scale_radius)
         PIDs_before = self._snapshot_worker_pids()
-        code = Huayno(
+        code = Ph4(#Huayno(
             converter,
             number_of_workers=number_of_workers,
             channel_type="sockets"
             )
         code.particles.add_particles(children)
-        code.parameters.epsilon_squared = (0. | units.au)**2.
+        code.parameters.epsilon_squared = (1. | units.au)**2.
         code.parameters.timestep_parameter = self.__code_dt
-        code.set_integrator("SHARED10_COLLISIONS")
+        #code.set_integrator("SHARED10_COLLISIONS")
 
         PIDs_after = self._snapshot_worker_pids()
         worker_PID = list(PIDs_after - PIDs_before)
@@ -577,10 +574,7 @@ class Nemesis(object):
                 self._star_channel_copier()
 
             self._sync_local_to_grav()
-            split_subcodes(
-                nem_class=self,
-                number_of_neighbours=int(1 * len(self.particles))
-                )
+            split_subcodes(nem_class=self)
             self._sync_local_to_grav(child_sync=False)
             self._check_single_system()
 

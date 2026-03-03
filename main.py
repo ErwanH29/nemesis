@@ -133,7 +133,6 @@ def run_simulation(
     tend: units.time,
     dtbridge: units.time,
     dt_diag: units.time,
-    test_particle: bool,
     n_worker_parent: int,
     code_dt: float,
     dE_track: bool,
@@ -149,7 +148,6 @@ def run_simulation(
         tend (units.time):      Simulation end time.
         dtbridge (units.time):  Bridge timestep.
         dt_diag (units.time):   Diagnostic time step.
-        test_particle (bool):   Flag to run test particle simulation.
         n_worker_parent (int):  Number of workers for parent code.
         code_dt (float):        Gravitational integrator internal timestep.
         dE_track (boolean):     Flag turning on energy error tracker.
@@ -252,7 +250,6 @@ def run_simulation(
     nemesis = Nemesis(
         dtbridge=dtbridge,
         code_dt=code_dt,
-        test_particle=test_particle,
         n_worker_parent=n_worker_parent,
         par_conv=conv_par,
         coll_dir=coll_dir,
@@ -379,11 +376,6 @@ def new_option_parser():
                       unit=units.yr,
                       default=500. | units.yr,
                       help="Bridge timestep")
-    result.add_option("--test_particles",
-                      dest="test_idx",
-                      type="int",
-                      default=0,
-                      help="Index of specific run")
     result.add_option("--code_dt",
                       dest="code_dt",
                       type="float",
@@ -442,7 +434,6 @@ if __name__ == "__main__":
         run_idx=o.run_idx,
         tend=o.tend,
         dtbridge=o.tbridge,
-        test_particle=o.test_idx,
         n_worker_parent=o.par_nworker,
         code_dt=o.code_dt,
         dt_diag=o.dt_diag,

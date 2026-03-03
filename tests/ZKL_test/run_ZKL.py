@@ -18,7 +18,6 @@ run_simulation(
     dtbridge=500 | units.yr,
     code_dt=0.1,
     dt_diag=500 | units.yr,
-    test_particle=False,
     n_worker_parent=1,
     gal_field=0,
     dE_track=1,
