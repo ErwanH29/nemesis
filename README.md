@@ -92,8 +92,8 @@ NOTE: Any worker change must be reflected in `_worker_list` to ensure proper han
 
 ##### Von Zeipel–Lidov–Kozai Test:
 To run this test follow:
-- Set-up initial conditions: `python tests/ZKL_test/initialise_LZK.py`
-- To run ```Nemesis```: `python tests/ZKL_test/run_ZKL.py`
+- Set-up initial conditions: `python tests/ZKL_test/initialise_ZKL.py`
+- To run ```Nemesis```: `PYTHONPATH=".:$PYTHONPATH" python tests/ZKL_test/run_ZKL.py`
 - To plot results: `python tests/ZKL_test/plot_ZKL.py`
 
 Suggested parameters:
