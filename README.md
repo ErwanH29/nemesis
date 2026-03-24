@@ -92,9 +92,9 @@ NOTE: Any worker change must be reflected in `_worker_list` to ensure proper han
 
 ##### Von Zeipel–Lidov–Kozai Test:
 To run this test follow:
-- Set-up initial conditions: `python /tests/ZKL_test/initialise_LZK.py`
-- To run ```Nemesis```: `python /tests/ZKL_test/run_ZKL.py`
-- To plot results: `python /tests/ZKL_test/plot_ZKL.py`
+- Set-up initial conditions: `python tests/ZKL_test/initialise_LZK.py`
+- To run ```Nemesis```: `python tests/ZKL_test/run_ZKL.py`
+- To plot results: `python tests/ZKL_test/plot_ZKL.py`
 
 Suggested parameters:
 - In `nemesis._parent_worker`, use `Huayno` as parent integrator with mode `SHARED10_COLLISIONS`.
@@ -111,10 +111,10 @@ The test allows validation of:
 
 ##### Asteroids in Cluster Test:
 To run this test follow:
-- Set-up initial conditions: `python /tests/cluster_test/initialise_cluster.py`
+- Set-up initial conditions: `python tests/cluster_test/initialise_cluster.py`
 - To run ```Nemesis```: `python tests/cluster_test/run_cluster.py` with the flag `RUN_NEMESIS = 1`
 - To run direct N-body code: `python tests/cluster_test/run_cluster.py` with the flag `RUN_NEMESIS = 0`
-- To plot results: `python /tests/cluster_test/plot_cluster.py`
+- To plot results: `python tests/cluster_test/plot_cluster.py`
 
 Suggested parameters:
 - `Ph4` as parent, child and direct N-body integrator.
