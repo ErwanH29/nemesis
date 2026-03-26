@@ -37,7 +37,7 @@ For AMUSE installation instructions, see [this guide](https://amuse.readthedocs.
 2. **Install dependencies**: <br />
     ```cd nemesis```
     ```conda install --file requirements.txt``` <br />
-3. **Install AMUSE packages**. Make sure these AMUSE packages are installed: `huayno` `ph4` `seba` `symple`. If not, this command can be used during your [AMUSE installation](https://amuse.readthedocs.io/en/latest/install/installing.html)  `./setup install amuse-framework amuse-huayno amuse-ph4 amuse-seba amuse-symple` <br />
+3. **Install recommended AMUSE packages**.  `huayno` `ph4` `seba` `symple` `kepler`. If not, this command can be used during your [AMUSE installation](https://amuse.readthedocs.io/en/latest/install/installing.html)  `./setup install amuse-framework amuse-huayno amuse-ph4 amuse-seba amuse-symple amuse-kepler` <br />
 4. **Compile C++ files**. These are used to calculate the correction kicks between children systems and parents, synchronising the micro- and macro-state: <br />
     ```cd src/cpp && make``` <br />
 5. **Generate initial conditions**. For instance: <br />
