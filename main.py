@@ -387,7 +387,7 @@ def new_option_parser():
                       help="Gravitational integrator internal timestep")
     result.add_option("--dt_diag",
                       dest="dt_diag",
-                      type="int",
+                      type="float",
                       unit=units.kyr,
                       default=10 | units.kyr,
                       help="Diagnostic time step")
