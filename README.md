@@ -37,13 +37,14 @@ For AMUSE installation instructions, see [this guide](https://amuse.readthedocs.
 2. **Install dependencies**: <br />
     ```cd nemesis```
     ```conda install --file requirements.txt``` <br />
-3. **Compile C++ files**. These are used to calculate the correction kicks between children systems and parents, synchronising the micro- and macro-state: <br />
+3. **Install recommended AMUSE packages**.  `huayno` `ph4` `seba` `symple` `kepler`. If not, this command can be used during your [AMUSE installation](https://amuse.readthedocs.io/en/latest/install/installing.html)  `./setup install amuse-framework amuse-huayno amuse-ph4 amuse-seba amuse-symple amuse-kepler` <br />
+4. **Compile C++ files**. These are used to calculate the correction kicks between children systems and parents, synchronising the micro- and macro-state: <br />
     ```cd src/cpp && make``` <br />
-4. **Generate initial conditions**. For instance: <br />
+5. **Generate initial conditions**. For instance: <br />
     ```cd examples/```
     ```python basic_cluster/particle_initialiser.py```
     This will create a particle set with several planetary systems. The particle set is always saved in a folder ```ICs/```.
-5. **Run the simulation**. From the project root: <br />
+6. **Run the simulation**. From the project root: <br />
     ```python main.py```
    If, instead, you wish to simulate your system for 1 Myr with a bridge time step of 100 yr:
    ```python main.py --tend=1Myr --dtbridge=100yr```
@@ -91,9 +92,9 @@ NOTE: Any worker change must be reflected in `_worker_list` to ensure proper han
 
 ##### Von Zeipel–Lidov–Kozai Test:
 To run this test follow:
-- Set-up initial conditions: `python /tests/ZKL_test/initialise_LZK.py`
-- To run ```Nemesis```: `python /tests/ZKL_test/run_ZKL.py`
-- To plot results: `python /tests/ZKL_test/plot_ZKL.py`
+- Set-up initial conditions: `python tests/ZKL_test/initialise_ZKL.py`
+- To run ```Nemesis```: `PYTHONPATH=".:$PYTHONPATH" python tests/ZKL_test/run_ZKL.py`
+- To plot results: `python tests/ZKL_test/plot_ZKL.py`
 
 Suggested parameters:
 - In `nemesis._parent_worker`, use `Huayno` as parent integrator with mode `SHARED10_COLLISIONS`.
@@ -110,10 +111,10 @@ The test allows validation of:
 
 ##### Asteroids in Cluster Test:
 To run this test follow:
-- Set-up initial conditions: `python /tests/cluster_test/initialise_cluster.py`
+- Set-up initial conditions: `python tests/cluster_test/initialise_cluster.py`
 - To run ```Nemesis```: `python tests/cluster_test/run_cluster.py` with the flag `RUN_NEMESIS = 1`
 - To run direct N-body code: `python tests/cluster_test/run_cluster.py` with the flag `RUN_NEMESIS = 0`
-- To plot results: `python /tests/cluster_test/plot_cluster.py`
+- To plot results: `python tests/cluster_test/plot_cluster.py`
 
 Suggested parameters:
 - `Ph4` as parent, child and direct N-body integrator.
