@@ -291,11 +291,10 @@ class Nemesis(object):
 
     def _parent_worker(self) -> object:
         """Define global integrator"""
-        code = Huayno(self._parent_conv, number_of_workers=self.__par_nworker)
+        code = Ph4(self._parent_conv, number_of_workers=self.__par_nworker)
         code.parameters.epsilon_squared = (0. | units.au)**2.
         code.parameters.timestep_parameter = self.__code_dt
-        code.set_integrator("SHARED10_COLLISIONS")
-        #code.parameters.force_sync = True
+        code.parameters.force_sync = True
         return code
 
     def _sub_worker(
