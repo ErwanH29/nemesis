@@ -225,6 +225,10 @@ def run_simulation(
         if (gal_field):
             particle_set = configure_galactic_frame(particle_set)
 
+    if not hasattr(particle_set, "type"):
+        print("Warning: Particle set has no 'type' attribute. Defaulting to blank.")
+        particle_set.type = ""
+    
     snap_path = os.path.join(snapshot_path, "snap_{}.hdf5")
     major_bodies = identify_parents(particle_set)
 
@@ -259,7 +263,9 @@ def run_simulation(
         gal_field=gal_field,
         verbose=verbose
         )
-    for nsyst, id_ in enumerate(np.unique(bounded_systems.syst_id)):
+
+    children_id = np.unique(bounded_systems.syst_id)
+    for id_ in children_id:
         print(f"\rAdding subsystem with syst_id = {id_}", end="", flush=True)
         subsystem = particle_set[particle_set.syst_id == id_]
         newparent = nemesis.particles.add_children(subsystem)
@@ -289,7 +295,7 @@ def run_simulation(
     with open(init_params, 'w') as f:
         f.write("Simulation Parameters:\n")
         f.write(f"  Number of particles: {len(particle_set)}\n")
-        f.write(f"  Number of initial children: {nsyst+1}\n")
+        f.write(f"  Number of initial children: {len(children_id)}\n")
         f.write(f"  Diagnostic timestep: {dt_diag.in_(units.yr)}\n")
         f.write(f"  Bridge timestep: {dtbridge.in_(units.yr)}\n")
         f.write(f"  End time: {tend.in_(units.Myr)}\n")

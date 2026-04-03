@@ -12,6 +12,8 @@ Possible Room for Improvements:
    memory address and not their PID. Also, even when many mergers occur, it is
    not a bottle neck, so not a priority.
 6. _parent_merger() is relatively slow due to dictionary manipulation.
+7. Stellar code in AMUSE can't handle different metallicities and/or
+   stellar ages,requires one per group.
 
 Extending the Physics:
 1. Handling of binary stellar evolution with SeBa. Currently, if a binary
@@ -54,7 +56,7 @@ from amuse.datamodel import Particles, Particle
 from amuse.ext.basicgraph import UnionFind
 from amuse.ext.composition_methods import SPLIT_4TH_S_M6
 from amuse.ext.galactic_potentials import MWpotentialBovy2015
-from amuse.ext.orbital_elements import orbital_elements
+from amuse.io import write_set_to_file
 from amuse.units import units, nbody_system
 
 from src.environment_functions import (
@@ -289,10 +291,11 @@ class Nemesis(object):
 
     def _parent_worker(self) -> object:
         """Define global integrator"""
-        code = Ph4(self._parent_conv, number_of_workers=self.__par_nworker)
+        code = Huayno(self._parent_conv, number_of_workers=self.__par_nworker)
         code.parameters.epsilon_squared = (0. | units.au)**2.
         code.parameters.timestep_parameter = self.__code_dt
-        code.parameters.force_sync = True
+        code.set_integrator("SHARED10_COLLISIONS")
+        #code.parameters.force_sync = True
         return code
 
     def _sub_worker(
@@ -568,9 +571,7 @@ class Nemesis(object):
                     self.model_time + 0.5 * timestep
                 )
                 self._star_channel_copier()
-
             split_subcodes(nem_class=self)
-            self._check_single_system()
 
         if self._verbose:  # For diagnostics
             print(f"Time: {self.model_time.in_(units.Myr)}")
@@ -580,27 +581,6 @@ class Nemesis(object):
                 print(f"Stellar code time: {self.stellar_code.model_time.in_(units.Myr)}")
             print(f"#Children: {Nkids}")
             print("===" * 50)
-
-    def _check_single_system(self) -> None:
-        """Check for any single particle children systems."""
-        for parent_key, (parent, child) in self.children.items():
-            if len(child) == 1:
-                if self._verbose:
-                    print("Single child detected. Cleaning dictionary...")
-
-                particle = child[0]
-                particle.position += parent.position
-                particle.velocity += parent.velocity
-
-                pid = self._pid_workers.pop(parent_key)
-                self.resume_workers(pid)
-                self.particles.add_particle(particle)
-                code = self.subcodes.pop(parent_key)
-                self._time_offsets.pop(code)
-                self._cpu_time.pop(parent_key)
-                self._child_channels.pop(parent_key)
-                code.cleanup_code()
-                code.stop()
 
     def _process_parent_mergers(self, corr_time: units.time) -> None:
         """
@@ -819,32 +799,25 @@ class Nemesis(object):
 
         # Save properties
         self.__nmerge += 1
-        print(f"...Collision #{self.__nmerge} Detected...")
         parent_key = parent.key
         self._child_channels[parent_key]["from_gravity_to_children"].copy()
 
         coll_a = enc_parti[0].as_particle_in_set(children)
         coll_b = enc_parti[1].as_particle_in_set(children)
         collider = Particles(particles=[coll_a, coll_b])
-        kepler_elements = orbital_elements(collider, G=GRAV_CONST)
-        sma = kepler_elements[2]
-        ecc = kepler_elements[3]
-        inc = kepler_elements[4]
+        if self._verbose:
+            print(f"...Collision #{self.__nmerge} Detected...")
+            print(f"Collider A: {coll_a}")
+            print(f"Collider B: {coll_b}")
 
-        tcoll = code.model_time + self._time_offsets[code] + self.__resume_offset
-        file_name = os.path.join(self.__coll_dir, f"merger{self.__nmerge}.txt")
-        with open(file_name, "w") as f:
-            f.write(f"Tcoll: {tcoll.in_(units.yr)}")
-            f.write(f"\nParent Key: {parent.key}")
-            f.write(f"\nKey1: {enc_parti[0].key}")
-            f.write(f"\nKey2: {enc_parti[1].key}")
-            f.write(f"\nType1: {coll_a.type}")
-            f.write(f"\nType2: {coll_b.type}")
-            f.write(f"\nM1: {enc_parti[0].mass.in_(units.MSun)}")
-            f.write(f"\nM2: {enc_parti[1].mass.in_(units.MSun)}")
-            f.write(f"\nSemi-major axis: {abs(sma).in_(units.au)}")
-            f.write(f"\nEccentricity: {ecc}")
-            f.write(f"\nInclination: {inc.in_(units.deg)}")
+        # Store file
+        file_name = os.path.join(self.__coll_dir, f"merger{self.__nmerge}.hdf5")
+        write_set_to_file(
+            collider, 
+            file_name, 
+            close_file=True,
+            overwrite_file=True
+            )
 
         # Create merger remnant
         most_massive = collider[collider.mass.argmax()]
@@ -1184,6 +1157,22 @@ class Nemesis(object):
                     else:
                         self.cleanup_code(first_clean=False)
                     raise Exception(f"Error while evolving parent {parent_key}: {e}")
+
+        for parent_key in list(self.subcodes.keys()):
+            pid = self._pid_workers[parent_key]
+            if len(self.subcodes[parent_key].particles) == 1:
+                self.resume_workers(pid)
+                old_subcode = self.subcodes.pop(parent_key)
+                self._time_offsets.pop(old_subcode)
+                self._child_channels.pop(parent_key)
+                self._pid_workers.pop(parent_key)
+                self._cpu_time.pop(parent_key)
+
+                old_subcode.cleanup_code()
+                old_subcode.stop()
+
+            else:
+                self.hibernate_workers(pid)
 
     @property
     def model_time(self) -> float:
