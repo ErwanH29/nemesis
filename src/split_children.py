@@ -38,13 +38,13 @@ def split_subcodes(nem_class) -> None:
         nem_class (object):  Nemesis instance.
     """
     if nem_class._verbose:
-        print("...Checking Splits...")
+        print("...Checking Splits...", flush=True)
 
     new_rogue = Particles()
     for parent_key, (parent, subsys) in list(nem_class.children.items()):
         components = connected_components_kdtree(
             child_set=subsys,
-            threshold=SPLIT_PARAM * parent.radius
+            threshold=SPLIT_PARAM / 2. * parent.radius
             )
         if len(components) <= 1:
             continue
@@ -115,7 +115,7 @@ def split_subcodes(nem_class) -> None:
 
     if len(new_rogue) > 0:
         if nem_class._verbose:
-            print(f"{len(new_rogue)} new rogue bodies...")
+            print(f"{len(new_rogue)} new rogue bodies...", flush=True)
 
         new_rogue.radius = set_parent_radius(new_rogue.mass)
         mask = new_rogue.radius > PARENT_RADIUS_MAX

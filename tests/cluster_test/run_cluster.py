@@ -71,7 +71,7 @@ else:
     t0 = cpu_time.time()
     dE_arr = []
     while time < tend:
-        print("Time = ", time.in_(units.yr))
+        print("Time = ", time.in_(units.yr), flush=True)
 
         time += dt
         code.evolve_model(time)

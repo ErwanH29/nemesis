@@ -56,7 +56,8 @@ from amuse.datamodel import Particles, Particle
 from amuse.ext.basicgraph import UnionFind
 from amuse.ext.composition_methods import SPLIT_4TH_S_M6
 from amuse.ext.galactic_potentials import MWpotentialBovy2015
-from amuse.io import write_set_to_file
+from amuse.ext.orbital_elements import orbital_elements
+from amuse.lab import write_set_to_file
 from amuse.units import units, nbody_system
 
 from src.environment_functions import (
@@ -204,7 +205,7 @@ class Nemesis(object):
             first_clean (bool):  If true, cleans parent and stellar codes.
         """
         if self._verbose:
-            print("...Cleaning up Nemesis...")
+            print("...Cleaning up Nemesis...", flush=True)
 
         if first_clean:
             self.parent_code.cleanup_code()
@@ -221,7 +222,7 @@ class Nemesis(object):
 
         gc.collect()
         if self._verbose:
-            print("...Nemesis cleaned up...")
+            print("...Nemesis cleaned up...", flush=True)
 
     def commit_particles(self) -> None:
         """
@@ -291,10 +292,11 @@ class Nemesis(object):
 
     def _parent_worker(self) -> object:
         """Define global integrator"""
-        code = Ph4(self._parent_conv, number_of_workers=self.__par_nworker)
+        code = Huayno(self._parent_conv, number_of_workers=self.__par_nworker)
         code.parameters.epsilon_squared = (0. | units.au)**2.
         code.parameters.timestep_parameter = self.__code_dt
-        code.parameters.force_sync = True
+        #code.parameters.force_sync = True
+        code.set_integrator("SHARED10_COLLISIONS")
         return code
 
     def _sub_worker(
@@ -573,13 +575,16 @@ class Nemesis(object):
             split_subcodes(nem_class=self)
 
         if self._verbose:  # For diagnostics
-            print(f"Time: {self.model_time.in_(units.Myr)}")
-            print(f"Global time: {self.parent_code.model_time.in_(units.Myr)}")
             Nkids = len(self.children.keys())
+            print(
+                f"Time: {self.model_time.in_(units.Myr)}\n"
+                f"Global time: {self.parent_code.model_time.in_(units.Myr)}", 
+                flush=True
+                )
             if self.__star_evol:
-                print(f"Stellar code time: {self.stellar_code.model_time.in_(units.Myr)}")
+                print(f"Stellar code time: {self.stellar_code.model_time.in_(units.Myr)}", flush=True)
             print(f"#Children: {Nkids}")
-            print("===" * 50)
+            print("===" * 50, flush=True)
 
     def _process_parent_mergers(self, corr_time: units.time) -> None:
         """
@@ -626,7 +631,7 @@ class Nemesis(object):
 
                         else:
                             if self._verbose:
-                                print("Cleaning up old code...")
+                                print("Cleaning up old code...", flush=True)
                             old_code = self.subcodes.pop(old_key)
                             self._time_offsets.pop(old_code)
                             old_code.cleanup_code()
@@ -702,7 +707,7 @@ class Nemesis(object):
 
             if par_key in self.children:
                 if self._verbose:
-                    print("First time Parent merges. Has children...")
+                    print("First time Parent merges. Has children...", flush=True)
 
                 # Store old attributes for reverse kicks and ZKL
                 _, children = self.children.pop(par_key)
@@ -712,7 +717,7 @@ class Nemesis(object):
 
             elif par_key in self.old_keys:
                 if self._verbose:
-                    print("First time Parent merges. Isolated...")
+                    print("First time Parent merges. Isolated...", flush=True)
 
                 # Store updated and old set in case other parent has children.
                 p = particle.as_particle_in_set(self.particles)
@@ -720,7 +725,7 @@ class Nemesis(object):
                 particle = self.old_copy_map[par_key]  # Old set.
                 if particle.mass == (0. | units.kg):
                     if self._verbose:
-                        print("Merging particle is an asteroid")
+                        print("Merging particle is an asteroid", flush=True)
                     particle.radius = ASTEROID_RADIUS
                 elif particle.mass < MIN_EVOL_MASS:
                     particle.radius = planet_radius(particle.mass)
@@ -730,7 +735,7 @@ class Nemesis(object):
 
             elif par_key in self._coll_parents:
                 if self._verbose:
-                    print("Parent merged before...")
+                    print("Parent merged before...", flush=True)
 
                 isol_system = False
                 if par_key in self._isolated_mergers:
@@ -753,7 +758,7 @@ class Nemesis(object):
                             )
 
             else:
-                print(f"Curious particle {particle} in coll_set?")
+                print(f"Curious particle {particle} in coll_set?", flush=True)
 
             self.particles.remove_particle(particle)
 
@@ -779,7 +784,8 @@ class Nemesis(object):
             parent: Particle,
             enc_parti: Particles,
             code: object,
-            resolved_keys: dict
+            resolved_keys: dict,
+            first_merger: bool
     ) -> tuple[Particles, dict]:
         """
         Merge two particles if the collision stopping condition is met.
@@ -789,6 +795,7 @@ class Nemesis(object):
             enc_parti (Particles): The particles in the collision.
             code (object):         The integrator used.
             resolved_keys (dict):  Dictionary, {Collider i Key: Remnant Key}.
+            first_merger (bool):   Whether it's the first merger in children during integration step.
         Returns:
             Particles: New parent.
             dict: Updated resolved keys dictionary.
@@ -805,17 +812,39 @@ class Nemesis(object):
         coll_b = enc_parti[1].as_particle_in_set(children)
         collider = Particles(particles=[coll_a, coll_b])
         if self._verbose:
-            print(f"...Collision #{self.__nmerge} Detected...")
-            print(f"Collider A: {coll_a}")
-            print(f"Collider B: {coll_b}")
+            print(
+                f"...Collision #{self.__nmerge} Detected...\n"
+                f"Collider A: {coll_a}"
+                f"Collider B: {coll_b}",
+                flush=True
+            )
 
-        # Store file
-        file_name = os.path.join(self.__coll_dir, f"merger{self.__nmerge}.hdf5")
-        write_set_to_file(
-            collider, 
-            file_name, 
-            close_file=True,
-            overwrite_file=True
+        kepler_elements = orbital_elements(collider, G=GRAV_CONST)
+        sma = kepler_elements[2]
+        ecc = kepler_elements[3]
+        inc = kepler_elements[4]
+
+        tcoll = code.model_time + self._time_offsets[code] + self.__resume_offset
+        file_name = os.path.join(self.__coll_dir, f"merger{self.__nmerge}.txt")
+        with open(file_name, "w") as f:
+            f.write(f"Tcoll: {tcoll.in_(units.yr)}")
+            f.write(f"\nParent Key: {parent.key}")
+            f.write(f"\nKey1: {enc_parti[0].key}")
+            f.write(f"\nKey2: {enc_parti[1].key}")
+            f.write(f"\nType1: {coll_a.type}")
+            f.write(f"\nType2: {coll_b.type}")
+            f.write(f"\nM1: {enc_parti[0].mass.in_(units.MSun)}")
+            f.write(f"\nM2: {enc_parti[1].mass.in_(units.MSun)}")
+            f.write(f"\nSemi-major axis: {abs(sma).in_(units.au)}")
+            f.write(f"\nEccentricity: {ecc}")
+            f.write(f"\nInclination: {inc.in_(units.deg)}")
+        
+        if first_merger:
+            write_set_to_file(
+                children,
+                file_name.replace(".txt", "_children.amuse"),
+                format="amuse",
+                close_file=True
             )
 
         # Create merger remnant
@@ -853,7 +882,7 @@ class Nemesis(object):
                 remnant.radius = planet_radius(remnant.mass)
 
         if self._verbose:
-            print(f"{coll_a.type}, {coll_b.type}")
+            print(f"{coll_a.type}, {coll_b.type}", flush=True)
 
         remnant.coll_events = max(collider.coll_events) + 1
         remnant.type = most_massive.type
@@ -943,7 +972,7 @@ class Nemesis(object):
         SN_particle = SN_detect.particles(0)
         for ci in range(len(SN_particle)):
             if self._verbose:
-                print("...Supernova Detected...")
+                print("...Supernova Detected...", flush=True)
 
             SN_parti = Particles(particles=SN_particle)
             natal_kick_x = SN_parti.natal_kick_x
@@ -983,7 +1012,7 @@ class Nemesis(object):
             self.stellar_code.evolve_model(dt)
 
             if self.SN_detection.is_set():
-                print("...Detection: SN Explosion...")
+                print("...Detection: SN Explosion...", flush=True)
                 self._handle_supernova(self.SN_detection, self.stars)
 
     def _drift_global(self, dt, corr_time) -> None:
@@ -994,8 +1023,11 @@ class Nemesis(object):
             corr_time (units.time):  Time to correct for drift
         """
         if self._verbose:
-            print("...Drifting Global...")
-            print(f"Evolving {len(self.particles)} until: {dt.in_(units.Myr)}")
+            print(
+                "...Drifting Global...\n"
+                f"Evolving {len(self.particles)} until: {dt.in_(units.Myr)}",
+                flush=True
+            )
 
         self.old_copy = self.particles.copy()
         self.old_copy_map = {p.key: p for p in self.old_copy}
@@ -1012,7 +1044,7 @@ class Nemesis(object):
                     )
                 try:
                     if self._verbose:
-                        print(f"... Merger @ T={coll_time.in_(units.Myr)}")
+                        print(f"... Merger @ T={coll_time.in_(units.Myr)}", flush=True)
                     for cs in coll_sets:
                         self._parent_merger(cs)
                 except Exception:
@@ -1033,7 +1065,7 @@ class Nemesis(object):
                         )
                     try:
                         if self._verbose:
-                            print(f"... Merger @ T={coll_time.in_(units.Myr)}")
+                            print(f"... Merger @ T={coll_time.in_(units.Myr)}", flush=True)
                         for cs in coll_sets:
                             self._parent_merger(cs)
                     except Exception:
@@ -1059,7 +1091,8 @@ class Nemesis(object):
                 code: object,
                 parent: Particle,
                 children: Particles,
-                stopping_condition
+                stopping_condition,
+                first_merger: bool
         ) -> Particle:
             """
             Function to resolve collisions
@@ -1067,6 +1100,7 @@ class Nemesis(object):
                 code (object):      Code with collision.
                 parent (Particle):  Parent particle.
                 stopping_condition (StoppingCondition): Stopping condition.
+                first_merger (bool): Whether it's the first merger in children during integration step.
             Returns:
                 Particle: Updated parent particle.
             """
@@ -1088,7 +1122,7 @@ class Nemesis(object):
                         coll_b = particle_dict.get(resolved_keys[coll_b.key])
 
                     if coll_b.key == coll_a.key:
-                        print("Curious?")
+                        print("Curious?", flush=True)
                         continue
 
                     colliding_particles = Particles(particles=[coll_a, coll_b])
@@ -1097,7 +1131,8 @@ class Nemesis(object):
                         parent,
                         colliding_particles,
                         code,
-                        resolved_keys
+                        resolved_keys,
+                        first_merger
                         )
                     Nresolved += 1
 
@@ -1115,6 +1150,7 @@ class Nemesis(object):
             code = self.subcodes[parent_key]
             parent = self.children[parent_key][0]
             children = self.children[parent_key][1]
+            first_merger = True
 
             sc = code.stopping_conditions.collision_detection
             sc.enable()  # A bit dirty
@@ -1126,15 +1162,16 @@ class Nemesis(object):
                 if sc.is_set():
                     with self._lock:
                         parent = resolve_collisions(
-                            code, parent, children, sc
+                            code, parent, children, sc, first_merger
                             )
+                        first_merger = False
 
             t1 = time.time()
             self._cpu_time[parent.key] = t1 - t0
             self.hibernate_workers(self._pid_workers[parent.key])
 
         if self._verbose:
-            print("...Drifting Children...")
+            print("...Drifting Children...", flush=True)
 
         sorted_cpu_time = sorted(
             self.subcodes.keys(),

@@ -172,11 +172,11 @@ def run_simulation(
         )
     coll_dir = os.path.join(dir_path, "collision_snapshot")
 
-    print(f"...Starting Nemesis simulation Run {run_idx}...")
-    print(f"Job ID: {os.getpid()}")
+    print(f"...Starting Nemesis simulation Run {run_idx}...", flush=True)
+    print(f"Job ID: {os.getpid()}", flush=True)
     if os.path.exists(init_params):
         if verbose:
-            print("...Loading from previous simulation...")
+            print("...Loading from previous simulation...", flush=True)
 
         with open(init_params, 'r') as f:
             iparams = f.readlines()
@@ -203,9 +203,12 @@ def run_simulation(
         tend = tend - time_offset
         current_mergers = particle_set.coll_events.sum()
         if verbose:
-            print(f"{tend.in_(units.Myr)} remaining in simulation")
-            print(f"# Mergers: {current_mergers}")
-            print(f"# Snaps: {snapshot_no}")
+            print(
+                f"{tend.in_(units.Myr)} remaining in simulation\n"
+                f"# Mergers: {current_mergers}\n"
+                f"# Snaps: {snapshot_no}", 
+                flush=True
+                )
 
         # These parameters ensure SeBa doesn't reset stellar age.
         stars = particle_set[particle_set.mass > MIN_EVOL_MASS]
@@ -215,7 +218,7 @@ def run_simulation(
 
     else:
         if verbose:
-            print("...Starting new simulation...")
+            print("...Starting new simulation...", flush=True)
 
         time_offset = 0. | units.yr
         current_mergers = 0
@@ -226,7 +229,7 @@ def run_simulation(
             particle_set = configure_galactic_frame(particle_set)
 
     if not hasattr(particle_set, "type"):
-        print("Warning: Particle set has no 'type' attribute. Defaulting to blank.")
+        print("Warning: Particle set has no 'type' attribute. Defaulting to blank.", flush=True)
         particle_set.type = ""
     
     snap_path = os.path.join(snapshot_path, "snap_{}.hdf5")
@@ -315,8 +318,11 @@ def run_simulation(
 
         if (nemesis.model_time >= t_diag) and (nemesis.dt_step != prev_step):
             if verbose:
-                print(f"Saving snapshot {snapshot_no}: t={t.in_(units.yr)}")
-                print(f"Time since last snapshot: {time.time() - snap_time}")
+                print(
+                    f"Saving snapshot {snapshot_no}: t={t.in_(units.yr)}\n"
+                    f"Time since last snapshot: {time.time() - snap_time}", 
+                    flush=True
+                )
                 snap_time = time.time()
 
             snapshot_no += 1
@@ -337,12 +343,12 @@ def run_simulation(
 
             prev_step = nemesis.dt_step
             if verbose:
-                print(f"t = {t.in_(units.Myr)}, dE = {abs((E1-E0)/E0)}")
+                print(f"t = {t.in_(units.Myr)}, dE = {abs((E1-E0)/E0)}", flush=True)
 
         prev_step = nemesis.dt_step
         if verbose:
             t1 = time.time()
-            print(f"Step took {t1-t0} seconds")
+            print(f"Step took {t1-t0} seconds", flush=True)
 
     allparts = nemesis.particles.all(approx_radii)
     write_set_to_file(
@@ -353,7 +359,7 @@ def run_simulation(
     )
 
     # Store simulation statistics
-    print("...Simulation Ended...")
+    print("...Simulation Ended...", flush=True)
     sim_time = (time.time() - START_TIME) / 60.
     fname = os.path.join(dir_path, 'sim_stats', f'sim_stats_{run_idx}.txt')
     with open(fname, 'w') as f:
