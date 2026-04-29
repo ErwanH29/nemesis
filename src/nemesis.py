@@ -292,11 +292,10 @@ class Nemesis(object):
 
     def _parent_worker(self) -> object:
         """Define global integrator"""
-        code = Huayno(self._parent_conv, number_of_workers=self.__par_nworker)
+        code = Ph4(self._parent_conv, number_of_workers=self.__par_nworker)
         code.parameters.epsilon_squared = (0. | units.au)**2.
         code.parameters.timestep_parameter = self.__code_dt
-        #code.parameters.force_sync = True
-        code.set_integrator("SHARED10_COLLISIONS")
+        code.parameters.force_sync = True
         return code
 
     def _sub_worker(
@@ -838,14 +837,6 @@ class Nemesis(object):
             f.write(f"\nSemi-major axis: {abs(sma).in_(units.au)}")
             f.write(f"\nEccentricity: {ecc}")
             f.write(f"\nInclination: {inc.in_(units.deg)}")
-        
-        if first_merger:
-            write_set_to_file(
-                children,
-                file_name.replace(".txt", "_children.amuse"),
-                format="amuse",
-                close_file=True
-            )
 
         # Create merger remnant
         most_massive = collider[collider.mass.argmax()]
