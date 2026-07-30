@@ -3,16 +3,17 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from natsort import natsorted
+import smplotlib
 
 from amuse.ext.orbital_elements import orbital_elements
 from amuse.lab import constants, units, Particles, read_set_from_file
 
 
 # Plot parameters
-plt.rcParams["font.family"] = "Times New Roman"
-plt.rcParams["mathtext.fontset"] = "cm"
-axlabel_size = 14
-tick_size = 14
+#plt.rcParams["font.family"] = "Times New Roman"
+#plt.rcParams["mathtext.fontset"] = "cm"
+axlabel_size = 22
+tick_size = 22
 
 
 def tickers(ax) -> plt.axis:
@@ -88,7 +89,7 @@ def plot_LZK() -> None:
             inc_df[i].append(inc_tot)
 
     color = ["black", "dodgerblue", "white"]
-    label = ["0 au", "1000 au", "100 au"]
+    label = ["0 au", r"$10^{3}$ au", r"$10^{2}$ au"]
     ls = ["-", "-", "-"]
     lw = [7, 3, 1]
 
@@ -146,8 +147,8 @@ def plot_LZK() -> None:
             ax.set_yscale("log")
 
         ax.set_xlim(time[0], time[-1])
-        ax.legend(fontsize=axlabel_size, frameon=False)
-        plt.savefig(f"tests/ZKL_test/ZKL_plot_{fig_name}.pdf", bbox_inches="tight")
+        ax.legend(fontsize=axlabel_size-2, frameon=False)
+        plt.savefig(f"tests/ZKL_test/ZKL_plot_{fig_name}.pdf")
         plt.clf()
         plt.close(fig)
 

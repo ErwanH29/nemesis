@@ -234,14 +234,12 @@ class Nemesis(object):
             - Defining stellar code particles.
             - Setting up the galactic field.
         """
-        particles = self.particles
         if (self.__star_evol):
-            particles = particles.all()
-            star_mask = particles.mass > MIN_EVOL_MASS
-            self.stars = particles[star_mask]
+            star_mask = self.particles.mass > MIN_EVOL_MASS
+            self.stars = self.particles[star_mask]
             self.stellar_code.particles.add_particle(self.stars)
 
-        particles.radius = set_parent_radius(particles.mass)
+        self.particles.radius = set_parent_radius(self.particles.mass)
         ntotal = len(self.children.keys())
         for nchild, (parent_key, (parent, child)) in enumerate(self.children.items()):
             if self._verbose:

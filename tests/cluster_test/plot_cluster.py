@@ -11,10 +11,11 @@ import numpy as np
 import os
 from scipy import stats
 
+import smplotlib
 
 # Set some globals
-plt.rcParams["font.family"] = "Times New Roman"
-plt.rcParams["mathtext.fontset"] = "cm"
+#plt.rcParams["font.family"] = "Times New Roman"
+#plt.rcParams["mathtext.fontset"] = "cm"
 
 SAVE_DIR = "tests/cluster_test"
 COLOURS = ["black", "dodgerblue"]
@@ -22,7 +23,7 @@ LABELS = ["Ph4", "Nemesis"]
 LINESTYLE = ["-", "--"]
 MARKER_SIZE = [50, 20, 40, 10]
 LW = [8, 3]
-AXLABEL_SIZE = TICK_SIZE = 14
+AXLABEL_SIZE = TICK_SIZE = 22
 
 DATA_DIR = "tests/cluster_test/data"
 
@@ -196,7 +197,7 @@ def plot_cluster_cdf(dir_data, nem_data):
     ax.set_xlabel(r"$v$ [km/s]", fontsize=AXLABEL_SIZE)
     ax.set_ylabel(r"$f_{<}$", fontsize=AXLABEL_SIZE)
     ax.set_ylim(0, 1)
-    ax.legend(fontsize=AXLABEL_SIZE+5, frameon=False)
+    ax.legend(fontsize=AXLABEL_SIZE, frameon=False)
     plt.savefig(f"{SAVE_DIR}/cdf_final_vel.pdf", dpi=300, bbox_inches='tight')
     plt.close()
 
@@ -223,7 +224,7 @@ def plot_cluster_cdf(dir_data, nem_data):
     ax.set_xlabel(r"$r$ [pc]", fontsize=AXLABEL_SIZE)
     ax.set_ylabel(r"$f_{<}$", fontsize=AXLABEL_SIZE)
     ax.set_ylim(0, 1)
-    ax.legend(fontsize=AXLABEL_SIZE+5, frameon=False)
+    ax.legend(fontsize=AXLABEL_SIZE, frameon=False)
     plt.savefig(f"{SAVE_DIR}/cdf_final_pos.pdf", dpi=300, bbox_inches='tight')
     plt.close()
 
@@ -267,7 +268,7 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
         for j, data in enumerate(df):
             sorted_data = np.sort(data)
             sample_data = np.arange(1, len(sorted_data)+1) / len(sorted_data)
-            axs[1].plot(sorted_data, sample_data, lw=2, color=COLOURS[j])
+            axs[1].plot(sorted_data, sample_data, lw=3, color=COLOURS[j])
             axs[1].scatter([], [], color=COLOURS[j], label=LABELS[j], s=50)
 
         sorted_nem = np.sort(df[1])
@@ -285,12 +286,12 @@ def plot_ast_cdf(dir_sma_ast, dir_ecc_ast, nem_sma_ast, nem_ecc_ast):
         res_df[0].append(x_common)
         res_df[1].append(residuals)
 
-        axs[0].plot(x_common, residuals, color="gray", lw=2)
+        axs[0].plot(x_common, residuals, color="gray", lw=3)
         axs[0].set_ylabel(r"$\Delta y$", fontsize=AXLABEL_SIZE)
 
         axs[1].set_xlabel(xlabel, fontsize=AXLABEL_SIZE)
         axs[1].set_ylabel(r"$f_{<}$", fontsize=AXLABEL_SIZE)
-        axs[1].legend(fontsize=AXLABEL_SIZE+5, frameon=False)
+        axs[1].legend(fontsize=AXLABEL_SIZE, frameon=False)
         axs[1].set_ylim(0, 1.)
         axs[1].set_xlim(xlims)
         for ax in axs:
@@ -543,7 +544,7 @@ print("...Plotting dE...")
 plot_energy(dir_data, nem_data)
 
 print("...Comparing visually...")
-compare_visually(dir_data, nem_data)
+#compare_visually(dir_data, nem_data)
 
 print("...Cluster Overall CDF Plots...")
 plot_cluster_cdf(dir_data, nem_data)
