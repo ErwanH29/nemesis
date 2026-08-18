@@ -237,7 +237,7 @@ class Nemesis(object):
         if (self.__star_evol):
             star_mask = self.particles.mass > MIN_EVOL_MASS
             self.stars = self.particles[star_mask]
-            self.stellar_code.particles.add_particle(self.stars)
+            self.stellar_code.particles.add_particles(self.stars)
 
         self.particles.radius = set_parent_radius(self.particles.mass)
         ntotal = len(self.children.keys())
@@ -955,23 +955,17 @@ class Nemesis(object):
             SN_detect (StoppingCondition):  SN stopping conidtion.
             bodies (Particles):  Particles in the parent system.
         """
+        if self._verbose:
+            print("...Supernova Detected...", flush=True)
+
         if self.dE_track:
             E0 = self.calculate_total_energy()
 
-        SN_particle = SN_detect.particles(0)
-        for ci in range(len(SN_particle)):
-            if self._verbose:
-                print("...Supernova Detected...", flush=True)
-
-            SN_parti = Particles(particles=SN_particle)
-            natal_kick_x = SN_parti.natal_kick_x
-            natal_kick_y = SN_parti.natal_kick_y
-            natal_kick_z = SN_parti.natal_kick_z
-
-            SN_parti = SN_parti.get_intersecting_subset_in(bodies)
-            SN_parti.vx += natal_kick_x
-            SN_parti.vy += natal_kick_y
-            SN_parti.vz += natal_kick_z
+        seba_sn = SN_detect.particles(0)
+        gravity_sn = seba_sn.get_intersecting_subset_in(bodies)
+        gravity_sn.vx += seba_sn.natal_kick_x
+        gravity_sn.vy += seba_sn.natal_kick_y
+        gravity_sn.vz += seba_sn.natal_kick_z
 
         if self.dE_track:
             E1 = self.calculate_total_energy()

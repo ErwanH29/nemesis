@@ -3,15 +3,14 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from natsort import natsorted
-import smplotlib
 
 from amuse.ext.orbital_elements import orbital_elements
 from amuse.lab import constants, units, Particles, read_set_from_file
 
 
 # Plot parameters
-#plt.rcParams["font.family"] = "Times New Roman"
-#plt.rcParams["mathtext.fontset"] = "cm"
+plt.rcParams["font.family"] = "Times New Roman"
+plt.rcParams["mathtext.fontset"] = "cm"
 axlabel_size = 22
 tick_size = 22
 
@@ -107,41 +106,49 @@ def plot_LZK() -> None:
         ax.set_ylabel(ylabel, fontsize=axlabel_size)
         ax.set_xlabel(r"$t$ [Myr]", fontsize=axlabel_size)
         for i in range(3):
-            ax.plot(time[:len(df[i])], df[i],
-                    color=color[i],
-                    zorder=i,
-                    lw=lw[i],
-                    ls=ls[i])
+            ax.plot(
+                time[:len(df[i])],
+                df[i],
+                color=color[i],
+                zorder=i,
+                lw=lw[i],
+                ls=ls[i],
+            )
+
             ax.scatter(
                 [], [],
                 label=label[i],
                 color=color[i],
-                edgecolor="black"
-                )
+                ls=ls[i],
+                edgecolor="black",
+            )
 
         if fig_name == "ecc":
-            # Create inset plot
+            ax.set_yscale("log")
             axins = inset_axes(
                 ax,
                 width="35%",
                 height="35%",
                 loc="lower right",
-                borderpad=2
-                )
+                borderpad=2,
+            )
+
             for i in range(3):
                 axins.plot(
-                    time[:len(ecc_df[i])], ecc_df[i],
+                    time[:len(ecc_df[i])],
+                    ecc_df[i],
                     color=color[i],
                     lw=lw[i],
                     ls=ls[i],
-                    zorder=i
-                    )
+                    zorder=i,
+                )
+
             axins.tick_params(
                 left=False,
                 bottom=False,
                 labelleft=False,
                 labelbottom=False
-                )
+            )
             axins.set_xlim(0., 0.12)
             axins.set_ylim(0.9965, 0.9995)
             ax.set_yscale("log")

@@ -11,11 +11,10 @@ import numpy as np
 import os
 from scipy import stats
 
-import smplotlib
 
 # Set some globals
-#plt.rcParams["font.family"] = "Times New Roman"
-#plt.rcParams["mathtext.fontset"] = "cm"
+plt.rcParams["font.family"] = "Times New Roman"
+plt.rcParams["mathtext.fontset"] = "cm"
 
 SAVE_DIR = "tests/cluster_test"
 COLOURS = ["black", "dodgerblue"]
