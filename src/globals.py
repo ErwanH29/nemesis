@@ -11,8 +11,9 @@ MWG = MWpotentialBovy2015()
 # SIMULATION PARAMETERS
 EPS = 1.e-8
 PARENT_RADIUS_COEFF = 100. | units.au
+PARENT_RADIUS_MIN = 10. | units.au
 PARENT_RADIUS_MAX = 750. | units.au
-SPLIT_PARAM = 1.
+SPLIT_PARAM = 1.0
 
 # SI UNITS
 ACC_UNITS = units.m / units.s**2
