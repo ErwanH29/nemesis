@@ -11,7 +11,6 @@ Possible Room for Improvements:
 4. Unit conversions is messy.
 """
 from __future__ import annotations
-
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 

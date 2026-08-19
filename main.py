@@ -12,7 +12,7 @@ For any help or questions, please contact:
     - Simon Portegies Zwart...(spz@strw.leidenuniv.nl)
 """
 from __future__ import annotations
-
+import csv
 import glob
 from natsort import natsorted
 import numpy as np
@@ -113,17 +113,17 @@ def identify_parents(particle_set: Particles) -> Particles:
     return parents
 
 
-def setup_simulation(dir_path: str, particle_set: Particles) -> tuple:
+def setup_simulation(dir_path: str, ic_file: str) -> tuple:
     """
     Setup simulation directories and load particle set.
     Args:
         dir_path (str):  Directory path for outputs.
-        particle_set (Particles):  The particle set.
+        ic_file (str):   The particle set.
     Returns:
         tuple: (dir_path, snapshot_path, particles)
     """
     snapshot_path = os.path.join(dir_path, "simulation_snapshot")
-    particle_set = load_particle_set(particle_set)
+    particle_set = load_particle_set(ic_file)
     return snapshot_path, particle_set
 
 
@@ -277,7 +277,7 @@ def run_simulation(
     nemesis.particles.add_particles(parents)
     nemesis.commit_particles()
     if (nemesis.dE_track):
-        energy_arr = []
+        energy_rows = []
         E0 = nemesis.calculate_total_energy()
 
     if star_evol:
@@ -339,11 +339,12 @@ def run_simulation(
 
         if (dE_track) and (prev_step != nemesis.dt_step):
             E1 = nemesis.calculate_total_energy() + nemesis.corr_energy
-            energy_arr.append(abs((E1-E0)/E0))
+            dE_val = abs((E1 - E0) / E0)
+            energy_rows.append((nemesis.model_time.value_in(units.Myr), dE_val))
 
             prev_step = nemesis.dt_step
             if verbose:
-                print(f"t = {t.in_(units.Myr)}, dE = {abs((E1-E0)/E0)}", flush=True)
+                print(f"t = {t.in_(units.Myr)}, dE = {dE_val}", flush=True)
 
         prev_step = nemesis.dt_step
         if verbose:
@@ -368,9 +369,12 @@ def run_simulation(
         f.write(f"\nTime step: {dtbridge.in_(units.Myr)}")
 
     nemesis.cleanup_code()
-    if (dE_track):
-        with open(os.path.join(dir_path, "energy_error.csv"), 'w') as f:
-            f.write(f"Energy error: {energy_arr}")
+    if dE_track:
+        energy_path = os.path.join(dir_path, "energy_error.csv")
+        with open(energy_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["time_myr", "relative_energy_error"])
+            writer.writerows(energy_rows)
 
 
 def new_option_parser():

@@ -96,19 +96,21 @@ class HierarchicalParticles(ParticlesOverlay):
             parent.velocity = 0.*child[0].velocity
 
         massives = child[child.mass > (0. | units.kg)]
-        parent.mass = np.sum(massives.mass)
+        if len(massives) == 0:
+            raise ValueError("Cannot construct a parent from a system with no massive bodies.")
+
         try:
-            if recenter:
-                com = massives.center_of_mass()
-                com_vel = massives.center_of_mass_velocity()
-
-                parent.position = com
-                parent.velocity = com_vel
-                child.position -= com
-                child.velocity -= com_vel
-
+            parent.mass = np.sum(massives.mass)
+            parent_com = massives.center_of_mass()
+            parent_com_vel = massives.center_of_mass_velocity()
         except Exception as e:
             raise ValueError(f"Error calculating parent attributes: {e}")
+
+        if recenter:
+            parent.position = parent_com
+            parent.velocity = parent_com_vel
+            child.position -= parent_com
+            child.velocity -= parent_com_vel
 
     def recenter_children(self, max_workers: int) -> None:
         """

@@ -77,6 +77,7 @@ src/globals.py:
 - `EPS`: Integration tolerance.
 - `MIN_EVOL_MASS`: Stellar evolution mass threshold.
 - `PARENT_RADIUS_COEFF`: Parent radius scaling coefficient.
+- `PARENT_RADIUS_MIN`: Minimum pareent radius.
 - `PARENT_RADIUS_MAX`: Maximum parent radius.
 - `SPLIT_PARAM`: Child system linking length.
 
@@ -127,8 +128,8 @@ Suggested parameters:
 - Turn off child collisions.
 
 ### Example Scientific Runs
-- [van Elteren et al. 2019: Survivability of planetary systems in young
-and dense star clusters](https://www.aanda.org/articles/aa/full_html/2019/04/aa34641-18/aa34641-18.html)
+- [van Elteren et al. 2019: Survivability of planetary systems in young and dense star clusters](https://www.aanda.org/articles/aa/full_html/2019/04/aa34641-18/aa34641-18.html)
+- [Hochart & Portegies Zwart 2026: Oort Cloud ecology: IV. Exchanging asteroids](https://ui.adsabs.harvard.edu/abs/arXiv:2604.19413)
 
 ### Notes:
 - Children require a ```syst_id``` particle attribute, with ```syst_id > 0``` forming children systems.

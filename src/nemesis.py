@@ -44,7 +44,6 @@ import psutil
 import signal
 import threading
 import time
-import traceback
 
 from amuse.community.huayno.interface import Huayno
 from amuse.community.ph4.interface import Ph4
@@ -57,15 +56,18 @@ from amuse.ext.basicgraph import UnionFind
 from amuse.ext.composition_methods import SPLIT_4TH_S_M6
 from amuse.ext.galactic_potentials import MWpotentialBovy2015
 from amuse.ext.orbital_elements import orbital_elements
-from amuse.lab import write_set_to_file
 from amuse.units import units, nbody_system
 
 from src.environment_functions import (
-    set_parent_radius, planet_radius, ZAMS_radius
+    set_parent_radius, 
+    planet_radius, 
+    ZAMS_radius
 )
 from src.globals import (
-    ASTEROID_RADIUS, EPS, GRAV_CONST,
-    MIN_EVOL_MASS, PARENT_RADIUS_MAX
+    ASTEROID_RADIUS, 
+    EPS, 
+    GRAV_CONST,
+    MIN_EVOL_MASS
 )
 from src.grav_correctors import CorrectionKicks
 from src.hierarchical_particles import HierarchicalParticles
@@ -74,20 +76,20 @@ from src.split_children import split_subcodes
 
 class Nemesis(object):
     def __init__(
-            self,
-            dtbridge: units.time,
-            code_dt: units.time,
-            n_worker_parent: int,
-            par_conv: nbody_system.nbody_to_si,
-            coll_dir: str,
-            free_cpus=os.cpu_count(),
-            nmerge=0,
-            resume_time=0. | units.yr,
-            dE_track=False,
-            star_evol=False,
-            gal_field=True,
-            verbose=True,
-            ):
+        self,
+        dtbridge: units.time,
+        code_dt: units.time,
+        n_worker_parent: int,
+        par_conv: nbody_system.nbody_to_si,
+        coll_dir: str,
+        free_cpus=os.cpu_count(),
+        nmerge=0,
+        resume_time=0. | units.yr,
+        dE_track=False,
+        star_evol=False,
+        gal_field=True,
+        verbose=True,
+    ):
         """
         Class setting up the simulation.
         Args:
@@ -174,13 +176,14 @@ class Nemesis(object):
 
     def _load_grav_lib(self) -> ctypes.CDLL:
         """Setup library to allow Python and C++ communication"""
+        path = os.getcwd()
         py_to_c_types = ndpointer(
             dtype=np.float64,
             ndim=1,
             flags='C_CONTIGUOUS'
             )
 
-        lib = ctypes.CDLL('./src/build/kick_particles_worker.so')
+        lib = ctypes.CDLL(f'{path}/src/build/kick_particles_worker.so')
         lib.find_gravity_at_point.argtypes = [
             py_to_c_types,
             py_to_c_types,
@@ -247,7 +250,8 @@ class Nemesis(object):
 
             scale_mass = parent.mass
             scale_radius = set_parent_radius(scale_mass)
-            parent.radius = min(PARENT_RADIUS_MAX, scale_radius)
+            parent.radius = scale_radius
+
             child.move_to_center()
             if parent not in self.subcodes:
                 code, child_pid = self._sub_worker(
@@ -347,10 +351,7 @@ class Nemesis(object):
                 p.cpu_affinity(all_cores)
 
         except Exception as e:
-            raise RuntimeError(
-                "Warning: could not set affinity for workers"
-                f"{pid_list}: {e}"
-                )
+            raise RuntimeError("Warning: could not set affinity for workers")
 
     def _snapshot_worker_pids(self) -> set[int]:
         """Return the set of PIDs of all children workers"""
@@ -383,16 +384,10 @@ class Nemesis(object):
                 os.kill(pid, signal.SIGSTOP)
             except ProcessLookupError:
                 self.cleanup_code()
-                raise ProcessLookupError(
-                    f"Process {pid} not found. "
-                    f"It may have exited. {traceback.format_exc()}"
-                )
+                raise ProcessLookupError(f"Process {pid} not found. It may have exited.")
             except PermissionError:
                 self.cleanup_code()
-                raise PermissionError(
-                    f"Insufficient permissions to stop process {pid}. "
-                    f"{traceback.format_exc()}"
-                )
+                raise PermissionError(f"Insufficient permissions to stop process {pid}.")
 
     def resume_workers(self, pid_list: list[int]) -> None:
         """
@@ -405,16 +400,10 @@ class Nemesis(object):
                 os.kill(pid, signal.SIGCONT)
             except ProcessLookupError:
                 self.cleanup_code()
-                raise ProcessLookupError(
-                    f"Process {pid} not found. It may have exited."
-                    f"Traceback: {traceback.format_exc()}"
-                    )
+                raise ProcessLookupError(f"Process {pid} not found. It may have exited.")
             except PermissionError:
                 self.cleanup_code()
-                raise PermissionError(
-                    f"Insufficient permissions to stop process {pid}."
-                    f"Traceback: {traceback.format_exc()}"
-                )
+                raise PermissionError(f"Insufficient permissions to stop process {pid}.")
 
     def _star_to_parents_chnl(self) -> None:
         """Create channels to copy stellar attributes to parent code."""
@@ -663,7 +652,7 @@ class Nemesis(object):
 
             self._set_worker_affinity(worker_pid)
             new_parent = self.particles[particle_keys == parent_key][0]
-            new_parent.radius = min(scale_radius, PARENT_RADIUS_MAX)
+            new_parent.radius = scale_radius
             self.particles.assign_children(new_parent, newparts)
 
             if code is None:  # Parent merger consisted of isolated particles.
@@ -1032,10 +1021,7 @@ class Nemesis(object):
                         self._parent_merger(cs)
                 except Exception:
                     self.cleanup_code()
-                    raise Exception(
-                        "Error during parent merger."
-                        f"{traceback.format_exc()}"
-                        )
+                    raise Exception("Error during parent merger.")
 
         if (self.__gal_field):
             while self.parent_code.model_time < dt * (1. - EPS):
@@ -1053,10 +1039,7 @@ class Nemesis(object):
                             self._parent_merger(cs)
                     except Exception:
                         self.cleanup_code()
-                        raise Exception(
-                            "Error during parent merger."
-                            f"{traceback.format_exc()}"
-                            )
+                        raise Exception("Error during parent merger.")
 
         if coll_time:
             self._process_parent_mergers(corr_time)
