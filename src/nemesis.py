@@ -235,8 +235,9 @@ class Nemesis(object):
             - Setting up the galactic field.
         """
         if (self.__star_evol):
-            star_mask = self.particles.mass > MIN_EVOL_MASS
-            self.stars = self.particles[star_mask]
+            p = self.particles.all()
+            star_mask = p.mass > MIN_EVOL_MASS
+            self.stars = p[star_mask]
             self.stellar_code.particles.add_particles(self.stars)
 
         self.particles.radius = set_parent_radius(self.particles.mass)
