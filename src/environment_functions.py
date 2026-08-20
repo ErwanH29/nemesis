@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import numpy as np
-from sklearn.cluster import DBSCAN
+from scipy.spatial import cKDTree
 
 from amuse.datamodel import Particles
 from amuse.units import units
 
-from src.globals import MWG, PARENT_RADIUS_COEFF
+from src.globals import (
+    MWG, 
+    PARENT_RADIUS_COEFF,
+    PARENT_RADIUS_MAX,
+    PARENT_RADIUS_MIN
+)
 
 
 def connected_components_kdtree(
@@ -19,21 +24,37 @@ def connected_components_kdtree(
         child_set (Particles):     The particle set.
         threshold (units.length):  Linking length.
     Returns:
-        list: A list of connected component in form of AMUSE particles
+        list: Connected component particle sets.
     """
-    coords = child_set.position.value_in(units.m)
-    criteria = threshold.value_in(units.m)
-    clustering = DBSCAN(
-        eps=criteria,
-        min_samples=1,  # Allow single-particle clusters
-        metric='euclidean',
-        algorithm="kd_tree",
-        n_jobs=1
-    ).fit(coords)
+    def find(index: int) -> int:
+        while nodes[index] != index:
+            nodes[index] = nodes[nodes[index]]
+            index = nodes[index]
+        return index
 
-    labels = clustering.labels_
-    unique_labels = set(labels)
-    return [child_set[labels == label] for label in unique_labels]
+    def union(left: int, right: int) -> None:
+        left_root = find(left)
+        right_root = find(right)
+        if left_root != right_root:
+            nodes[right_root] = left_root
+
+
+    rad_m = threshold.value_in(units.m)
+    pos_m = child_set.position.value_in(units.m)
+
+    count = len(child_set)
+    nodes = np.arange(count, dtype=np.intp)  # Each particle is its own node initially
+
+    tree = cKDTree(pos_m)
+    # Join every pair whose distance is within the linking length
+    for left, right in tree.query_pairs(rad_m):
+        union(int(left), int(right))
+
+    # Resolve every particle to its final connected-component root
+    labels = np.fromiter((find(i) for i in range(count)), dtype=np.intp)
+    roots, first_indices = np.unique(labels, return_index=True)
+    order = np.argsort(first_indices)
+    return [child_set[labels == root] for root in roots[order]]   # Find all particles that share the same root (new child)
 
 
 def galactic_frame(
@@ -77,7 +98,18 @@ def set_parent_radius(system_mass: units.mass) -> units.length:
     Returns:
         units.length: Merging radius of the parent system
     """
-    radius = PARENT_RADIUS_COEFF * (system_mass.value_in(units.MSun))**(1./3.)
+    mass_msun = system_mass.value_in(units.MSun)
+    radius = PARENT_RADIUS_COEFF * mass_msun**(1.0 / 3.0)
+    if np.ndim(mass_msun) == 0:
+        return min(max(radius, PARENT_RADIUS_MIN), PARENT_RADIUS_MAX)
+    
+    mask_over = radius > PARENT_RADIUS_MAX
+    mask_under = radius < PARENT_RADIUS_MIN
+    mask_zero = mass_msun <= 1e-15  # Asteroids given zero radius
+
+    radius[mask_over] = PARENT_RADIUS_MAX
+    radius[mask_under] = PARENT_RADIUS_MIN
+    radius[mask_zero] = 0.0 | units.au
     return radius
 
 
