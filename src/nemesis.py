@@ -938,12 +938,11 @@ class Nemesis(object):
 
         return newparent, resolved_keys
 
-    def _handle_supernova(self, SN_detect, bodies: Particles) -> None:
+    def _handle_supernova(self, SN_detect) -> None:
         """
         Handle SN events.
         Args:
             SN_detect (StoppingCondition):  SN stopping conidtion.
-            bodies (Particles):  Particles in the parent system.
         """
         if self._verbose:
             print("...Supernova Detected...", flush=True)
@@ -951,15 +950,54 @@ class Nemesis(object):
         if self.dE_track:
             E0 = self.calculate_total_energy()
 
-        seba_sn = SN_detect.particles(0)
-        gravity_sn = seba_sn.get_intersecting_subset_in(bodies)
-        gravity_sn.vx += seba_sn.natal_kick_x
-        gravity_sn.vy += seba_sn.natal_kick_y
-        gravity_sn.vz += seba_sn.natal_kick_z
+        sn_particles = SN_detect.particles(0)
+        p = self.particles.all()
+        for ci in range(len(sn_particles)):
+            if self._verbose:
+                print(f"...Supernova Detected...")
 
-        if self.dE_track:
-            E1 = self.calculate_total_energy()
-            self.corr_energy += E1 - E0
+            sn = sn_particles[ci]
+            child_particle = False
+            local_p = sn.as_particle_in_set(p)
+            if local_p in self.parent_code.particles:
+                if self._verbose:
+                    print("Supernova in parent code", flush=True)
+
+                gravity_particle = local_p.as_particle_in_set(
+                    self.parent_code.particles
+                    ).as_set()
+                code = self.parent_code
+
+            else:
+                for parent_key, code in self.subcodes.items():
+                    self.resume_workers(self._pid_workers[parent_key])
+                    if local_p in code.particles:
+                        if self._verbose:
+                            print("Supernova in  children code", flush=True)
+
+                        gravity_particle = local_p.as_particle_in_set(
+                            code.particles
+                            ).as_set()
+                        break
+
+                    self.hibernate_workers(self._pid_workers[parent_key])
+                    child_particle = True
+
+            # Ugly, but AMUSE doesn't allow direct assignment for particle subsets
+            parts = gravity_particle.copy()
+            parts.vx = gravity_particle.vx + sn.natal_kick_x
+            parts.vy = gravity_particle.vy + sn.natal_kick_y
+            parts.vz = gravity_particle.vz + sn.natal_kick_z
+
+            channel = parts.new_channel_to(gravity_particle)
+            channel.copy_attributes(["vx", "vy", "vz"])
+
+            if child_particle:
+                self.hibernate_workers(self._pid_workers[parent_key])
+
+            if self.dE_track:
+                E1 = self.calculate_total_energy()
+                self.corr_energy += E1 - E0
 
     def _find_coll_sets(self, p1: Particle, p2: Particle) -> UnionFind:
         """
@@ -986,7 +1024,7 @@ class Nemesis(object):
 
             if self.SN_detection.is_set():
                 print("...Detection: SN Explosion...", flush=True)
-                self._handle_supernova(self.SN_detection, self.stars)
+                self._handle_supernova(self.SN_detection)
 
     def _drift_global(self, dt, corr_time) -> None:
         """
